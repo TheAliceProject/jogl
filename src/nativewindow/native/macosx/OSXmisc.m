@@ -1133,7 +1133,8 @@ static void RunOnThread (JNIEnv *env, jobject runnable, BOOL onMain, jint delayI
 #endif
 
         if( onMain ) {
-            [mr performSelectorOnMainThread:@selector(jRun) withObject:nil waitUntilDone:NO];
+            NSArray* activeModes = @[NSDefaultRunLoopMode, NSEventTrackingRunLoopMode, NSModalPanelRunLoopMode, @"AWTRunLoopMode"];
+            [mr performSelectorOnMainThread:@selector(jRun) withObject:nil waitUntilDone:NO modes: activeModes];
         } else {
             NSTimeInterval delay = (double)delayInMS/1000.0;
             [mr performSelector:@selector(jRun) withObject:nil afterDelay:delay];
