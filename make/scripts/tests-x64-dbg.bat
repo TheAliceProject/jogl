@@ -5,21 +5,19 @@ REM set TEMP=C:\Documents and Settings\jogamp\temp
 REM set TMP=C:\Documents and Settings\jogamp\temp
 
 set BLD_SUB=build-win64
-set J2RE_HOME=c:\jre-11.0.4+11_x64
-set JAVA_HOME=c:\jdk-11.0.4+11_x64
+set J2RE_HOME=c:\jdk-17
+set JAVA_HOME=c:\jdk-17
 set ANT_PATH=C:\apache-ant-1.10.5
 
 set PROJECT_ROOT=D:\projects\jogamp\jogl
 set BLD_DIR=..\%BLD_SUB%
 
-REM set FFMPEG_LIB=C:\ffmpeg_libav\lavc53_lavf53_lavu51-ffmpeg\x64
-REM set FFMPEG_LIB=C:\ffmpeg_libav\lavc55_lavf55_lavu52-ffmpeg\x64
-set FFMPEG_LIB=C:\ffmpeg_libav\lavc55_lavf55_lavu52-ffmpeg-2013-10-09\x64
-REM set FFMPEG_LIB=C:\ffmpeg_libav\lavc54_lavf54_lavu52_lavr01-libav\x64
+set MESA3D_LIB=C:\Mesa3D\x64
+set FFMPEG_LIB=C:\ffmpeg-5.1.2-full_build-shared\bin
 
 REM set PATH=%JAVA_HOME%\bin;%ANT_PATH%\bin;c:\mingw\bin;%PATH%
 REM set PATH=%JAVA_HOME%\bin;%ANT_PATH%\bin;%PROJECT_ROOT%\make\lib\external\PVRVFrame\OGLES-2.0\Windows_x86_64;%PATH%
-set PATH=%J2RE_HOME%\bin;%JAVA_HOME%\bin;%ANT_PATH%\bin;C:\temp;%FFMPEG_LIB%;%PATH%
+set PATH=%J2RE_HOME%\bin;%JAVA_HOME%\bin;%ANT_PATH%\bin;C:\temp;%MESA3D_LIB%;%FFMPEG_LIB%;%PATH%
 echo PATH %PATH%
 
 set CP_ALL=.;%BLD_DIR%\jar\jogl-all.jar;%BLD_DIR%\jar\atomic\oculusvr.jar;%BLD_DIR%\jar\jogl-test.jar;..\..\joal\%BLD_SUB%\joal.jar;..\..\gluegen\%BLD_SUB%\gluegen-rt.jar;..\..\gluegen\%BLD_SUB%\gluegen-test-util.jar;..\..\gluegen\make\lib\junit.jar;%ANT_PATH%\lib\ant.jar;%ANT_PATH%\lib\ant-junit.jar;%BLD_DIR%\..\make\lib\swt\win32-win32-x86_64\swt.jar
@@ -46,9 +44,10 @@ REM set D_ARGS="-Dnativewindow.debug.GraphicsConfiguration -Djogl.debug.Capabili
 REM set D_ARGS="-Djogamp.debug.IOUtil"
 REM set D_ARGS="-Djogl.debug.GLSLCode"
 REM set D_ARGS="-Djogl.debug.GLSLCode" "-Djogl.debug.GLMediaPlayer"
-REM set D_ARGS="-Djogl.debug.GLMediaPlayer"
+set D_ARGS="-Djogl.debug.GLMediaPlayer"
 REM set D_ARGS="-Djogl.debug.GLMediaPlayer" "-Djogl.debug.AudioSink"
 REM set D_ARGS="-Djogl.debug.GLMediaPlayer" "-Djogl.debug.GLMediaPlayer.Native"
+REM set D_ARGS="-Djogl.debug.GLMediaPlayer" "-Djogl.debug.GLMediaPlayer.Native" "-Djogamp.debug.NativeLibrary=true"
 REM set D_ARGS="-Djogl.debug.GLMediaPlayer.StreamWorker.delay=25" "-Djogl.debug.GLMediaPlayer"
 REM set D_ARGS="-Djogl.debug.GLMediaPlayer.Native"
 REM set D_ARGS="-Djogl.debug.AudioSink"
@@ -72,7 +71,7 @@ REM set D_ARGS="-Djogl.debug.GLContext" "-Djogl.debug.GLJPanel"
 REM set D_ARGS="-Djogl.gljpanel.noverticalflip"
 REM set D_ARGS="-Dnewt.debug=all"
 REM set D_ARGS="-Dnewt.debug.Window"
-set D_ARGS="-Dnativewindow.debug.SWT" "-Dnewt.debug.Window" "-Djogl.debug.GLCanvas"
+REM set D_ARGS="-Dnativewindow.debug.SWT" "-Dnewt.debug.Window" "-Djogl.debug.GLCanvas"
 REM set D_ARGS="-Dnativewindow.debug.JFX" "-Dnewt.debug.Window"
 REM set D_ARGS="-Dnewt.debug.Window.KeyEvent"
 REM set D_ARGS="-Dnewt.debug.Window" "-Dnewt.debug.Window.KeyEvent" "-Dnewt.debug.EDT"
@@ -97,6 +96,10 @@ REM set D_ARGS="-Djogamp.debug.ReflectionUtil.forNameStats"
 REM set X_ARGS="-Dsun.java2d.noddraw=true" "-Dsun.java2d.opengl=true" "-Dsun.awt.noerasebackground=true"
 REM set X_ARGS="-Dsun.java2d.noddraw=true" "-Dsun.java2d.d3d=false" "-Dsun.java2d.ddoffscreen=false" "-Dsun.java2d.gdiblit=false" "-Dsun.java2d.opengl=false" "-Dsun.awt.noerasebackground=true" "-Xms512m" "-Xmx1024m"
 REM set X_ARGS="-Dsun.java2d.noddraw=true" "-Dsun.java2d.d3d=false" "-Dsun.java2d.ddoffscreen=false" "-Dsun.java2d.gdiblit=false" "-Dsun.java2d.opengl=true" "-Dsun.awt.noerasebackground=true" "-Xms512m" "-Xmx1024m"
+
+REM set MODULE_ARGS=--add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.desktop/sun.awt=ALL-UNNAMED --add-opens java.desktop/sun.java2d=ALL-UNNAMED
+set MODULE_ARGS=--add-opens java.desktop/sun.awt=ALL-UNNAMED --add-opens java.desktop/sun.java2d=ALL-UNNAMED
+set X_ARGS="-Dsun.java2d.noddraw=true" "-Dsun.awt.noerasebackground=true" %MODULE_ARGS%
 
 scripts\tests-win.bat %*
 

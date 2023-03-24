@@ -13,30 +13,32 @@ import java.io.IOException;
 
 /**
  *
- * @author <a href="mailto:davidsch@dev.java.net">David Schweinsberg</a>
- * @version $Id: KerningPair.java,v 1.1.1.1 2004-12-05 23:14:47 davidsch Exp $
+ * @author <a href="mailto:david.schweinsberg@gmail.com">David Schweinsberg</a>
  */
 public class KerningPair {
 
-    private final int left;
-    private final int right;
-    private final short value;
+    private final int left; // uint16
+    private final int right; // uint16
+    private final short value; // sint16 in FUnits
 
     /** Creates new KerningPair */
-    protected KerningPair(final DataInput di) throws IOException {
+    KerningPair(final DataInput di) throws IOException {
         left = di.readUnsignedShort();
         right = di.readUnsignedShort();
         value = di.readShort();
     }
 
+    /** left glyph index */
     public int getLeft() {
         return left;
     }
 
+    /** right glyph index */
     public int getRight() {
         return right;
     }
 
+    /** sint16 in FUnits between left and right glyph within a word */
     public short getValue() {
         return value;
     }

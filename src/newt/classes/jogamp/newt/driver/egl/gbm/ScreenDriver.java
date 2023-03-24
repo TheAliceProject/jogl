@@ -112,14 +112,20 @@ public class ScreenDriver extends ScreenImpl {
         props[i++] = 0; // rotation
         final MonitorMode currentMode = MonitorModeProps.streamInMonitorMode(null, cache, props, 0);
 
+        final int crt_id = encoder[scridx].getCrtc_id();
         props = new int[MonitorModeProps.MIN_MONITOR_DEVICE_PROPERTIES - 1 - MonitorModeProps.NUM_MONITOR_MODE_PROPERTIES];
         i = 0;
         props[i++] = props.length;
-        props[i++] = encoder[scridx].getCrtc_id(); // crt_id
+        props[i++] = crt_id;
         props[i++] = 0; // is-clone
         props[i++] = 1; // is-primary
-        props[i++] = connectors[scridx].getMmWidth();
-        props[i++] = connectors[scridx].getMmHeight();
+        if( null != usrMonitorMMSize ) {
+            props[i++] = usrMonitorMMSize.getWidth();
+            props[i++] = usrMonitorMMSize.getHeight();
+        } else {
+            props[i++] = connectors[scridx].getMmWidth();
+            props[i++] = connectors[scridx].getMmHeight();
+        }
         props[i++] = 0; // rotated viewport x pixel-units
         props[i++] = 0; // rotated viewport y pixel-units
         props[i++] = mode[scridx].getHdisplay(); // rotated viewport width pixel-units
@@ -128,7 +134,7 @@ public class ScreenDriver extends ScreenImpl {
         props[i++] = 0; // rotated viewport y window-units
         props[i++] = mode[scridx].getHdisplay(); // rotated viewport width window-units
         props[i++] = mode[scridx].getVdisplay(); // rotated viewport height window-units
-        MonitorModeProps.streamInMonitorDevice(cache, this, currentMode, null, cache.monitorModes, props, 0, null);
+        MonitorModeProps.streamInMonitorDevice(cache, this, crt_id, null, currentMode, null, false, cache.monitorModes, props, 0, null);
 
         crtc_ids = new int[] { encoder[scridx].getCrtc_id() };
 

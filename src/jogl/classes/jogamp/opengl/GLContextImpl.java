@@ -42,7 +42,6 @@ package jogamp.opengl;
 
 import java.lang.reflect.Method;
 import java.nio.IntBuffer;
-import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
@@ -51,10 +50,12 @@ import java.util.Map;
 import java.util.Set;
 
 import com.jogamp.common.ExceptionUtils;
+import com.jogamp.common.os.Clock;
 import com.jogamp.common.os.DynamicLookupHelper;
 import com.jogamp.common.os.Platform;
 import com.jogamp.common.util.Bitfield;
 import com.jogamp.common.util.ReflectionUtil;
+import com.jogamp.common.util.SecurityUtil;
 import com.jogamp.common.util.VersionNumber;
 import com.jogamp.common.util.VersionNumberString;
 import com.jogamp.common.util.locks.RecursiveLock;
@@ -86,6 +87,29 @@ import com.jogamp.opengl.GLPipelineFactory;
 import com.jogamp.opengl.GLProfile;
 
 public abstract class GLContextImpl extends GLContext {
+
+  /** Selected {@link Platform.OSType#MACOS} or {@link Platform.OSType#IOS} {@link VersionNumber}s. */
+  public static class MacOSVersion {
+      /** OSX Lion, i.e. 10.7.0 */
+      public static final VersionNumber Lion;
+      /** OSX Mavericks, i.e. 10.9.0 */
+      public static final VersionNumber Mavericks;
+      /** OSX Mojave, i.e. 10.14.0 */
+      public static final VersionNumber Mojave;
+
+      static {
+          if( Platform.getOSType() == Platform.OSType.MACOS ) {
+              Lion = new VersionNumber(10,7,0);
+              Mavericks = new VersionNumber(10,9,0);
+              Mojave = new VersionNumber(10,14,0);
+          } else {
+              Lion = null;
+              Mavericks = null;
+              Mojave = null;
+          }
+      }
+  }
+
   /**
    * Context full qualified name: display_type + display_connection + major + minor + ctp.
    * This is the key for all cached GL ProcAddressTables, etc, to support multi display/device setups.
@@ -1022,7 +1046,8 @@ public abstract class GLContextImpl extends GLContext {
           this.preCtxVersion = preCtxVersion;
           this.preCtxOptions = preCtxOptions;
       }
-      public final String toString() {
+      @Override
+    public final String toString() {
           return toString(new StringBuilder(), -1, -1, -1, -1).toString();
       }
       public final StringBuilder toString(final StringBuilder sb, final int minMajor, final int minMinor, final int maxMajor, final int maxMinor) {
@@ -1176,7 +1201,7 @@ public abstract class GLContextImpl extends GLContext {
         if (DEBUG) {
             System.err.println(getThreadName() + ": createContextARB-MapGLVersions START (GLDesktop "+hasOpenGLDesktopSupport+", GLES "+hasOpenGLESSupport+", minorVersion "+hasMinorVersionSupport+") on "+device);
         }
-        final long t0 = ( DEBUG ) ? System.nanoTime() : 0;
+        final long t0 = ( DEBUG ) ? Clock.currentNanos() : 0;
         boolean success = false;
         // Following GLProfile.GL_PROFILE_LIST_ALL order of profile detection { GL4bc, GL3bc, GL2, GL4, GL3, GL2GL3, GLES2, GL2ES2, GLES1, GL2ES1 }
         boolean hasGL4bc = false;
@@ -1226,7 +1251,7 @@ public abstract class GLContextImpl extends GLContext {
         // ensuring proper user behavior across platforms due to different feature sets!
         //
         if( Platform.OSType.MACOS == Platform.getOSType() &&
-            Platform.getOSVersionNumber().compareTo(Platform.OSXVersion.Mavericks) >= 0 ) {
+            Platform.getOSVersionNumber().compareTo(MacOSVersion.Mavericks) >= 0 ) {
             /**
              * OSX 10.9 GLRendererQuirks.GL4NeedsGL3Request, quirk is added as usual @ setRendererQuirks(..)
              */
@@ -1326,7 +1351,7 @@ public abstract class GLContextImpl extends GLContext {
             GLContext.setAvailableGLVersionsSet(device, true);
         }
         if(DEBUG) {
-            final long t1 = System.nanoTime();
+            final long t1 = Clock.currentNanos();
             System.err.println(getThreadName() + ": createContextARB-MapGLVersions END (success "+success+") on "+device+", profileAliasing: "+PROFILE_ALIASING+", total "+(t1-t0)/1e6 +"ms");
             if( success ) {
                 System.err.println(GLContext.dumpAvailableGLVersions(null).toString());
@@ -1621,7 +1646,7 @@ public abstract class GLContextImpl extends GLContext {
       GLEmitter by looking up anew all of its function pointers
       using the given {@link GLDynamicLookupHelper}. */
   protected final void resetProcAddressTable(final ProcAddressTable table, final GLDynamicLookupHelper dlh) {
-    AccessController.doPrivileged(new PrivilegedAction<Object>() {
+    SecurityUtil.doPrivileged(new PrivilegedAction<Object>() {
         @Override
         public Object run() {
             table.reset( dlh );
@@ -1777,7 +1802,7 @@ public abstract class GLContextImpl extends GLContext {
     final AbstractGraphicsDevice adevice = aconfig.getScreen().getDevice();
 
     if( !glGetPtrInit ) {
-        AccessController.doPrivileged(new PrivilegedAction<Object>() {
+        SecurityUtil.doPrivileged(new PrivilegedAction<Object>() {
             @Override
             public Object run() {
                 final GLDynamicLookupHelper glDynLookupHelper = getGLDynamicLookupHelper(reqMajor, reqCtxProfileBits);
@@ -2323,7 +2348,7 @@ public abstract class GLContextImpl extends GLContext {
             }
             quirks.addQuirk( quirk );
         }
-        if( Platform.getOSVersionNumber().compareTo(Platform.OSXVersion.Mavericks) >= 0 && 3==reqMajor && 4==hasMajor ) {
+        if( Platform.getOSVersionNumber().compareTo(MacOSVersion.Mavericks) >= 0 && 3==reqMajor && 4==hasMajor ) {
             final int quirk = GLRendererQuirks.GL4NeedsGL3Request;
             if(DEBUG) {
                 System.err.println("Quirk: "+GLRendererQuirks.toString(quirk)+": cause: OS "+Platform.getOSType()+", OS Version "+Platform.getOSVersionNumber()+", req "+reqMajor+"."+reqMinor);
@@ -2339,7 +2364,7 @@ public abstract class GLContextImpl extends GLContext {
                 }
                 quirks.addQuirk( quirk );
             }
-            if( Platform.getOSVersionNumber().compareTo(Platform.OSXVersion.Lion) < 0 ) { // < OSX 10.7.0 w/ NV has unstable GLSL
+            if( Platform.getOSVersionNumber().compareTo(MacOSVersion.Lion) < 0 ) { // < OSX 10.7.0 w/ NV has unstable GLSL
                 final int quirk = GLRendererQuirks.GLSLNonCompliant;
                 if(DEBUG) {
                     System.err.println("Quirk: "+GLRendererQuirks.toString(quirk)+": cause: OS "+Platform.getOSType()+", OS Version "+Platform.getOSVersionNumber()+", Renderer "+glRenderer);
@@ -2665,7 +2690,7 @@ public abstract class GLContextImpl extends GLContext {
         throw new GLException("No GLDynamicLookupHelper for "+this);
     }
     final String tmpBase = GLNameResolver.normalizeVEN(GLNameResolver.normalizeARB(glFunctionName, true), true);
-    return AccessController.doPrivileged(new PrivilegedAction<Boolean>() {
+    return SecurityUtil.doPrivileged(new PrivilegedAction<Boolean>() {
         @Override
         public Boolean run() {
             boolean res = false;

@@ -43,7 +43,7 @@ import com.jogamp.nativewindow.NativeWindowException;
 import com.jogamp.nativewindow.util.Dimension;
 import com.jogamp.nativewindow.util.Rectangle;
 import com.jogamp.nativewindow.util.RectangleImmutable;
-
+import com.jogamp.common.os.Clock;
 import com.jogamp.common.util.ArrayHashSet;
 import com.jogamp.common.util.PropertyAccess;
 import com.jogamp.newt.Display;
@@ -84,8 +84,9 @@ public abstract class ScreenImpl extends Screen implements MonitorModeListener {
     protected int refCount; // number of Screen references by Window
     protected Rectangle virtViewportPU = new Rectangle(0, 0, 0, 0); // virtual rotated viewport in pixel units
     protected Rectangle virtViewportWU = new Rectangle(0, 0, 0, 0); // virtual rotated viewport in window units
-    protected static Dimension usrSize = null; // property values: newt.ws.swidth and newt.ws.sheight
-    protected static volatile boolean usrSizeQueried = false;
+    protected static Dimension usrScreenPixelSize = null; // property values: newt.ws.swidth and newt.ws.sheight
+    protected static Dimension usrMonitorMMSize = null; // property values: newt.ws.mmwidth and newt.ws.mmheight
+    protected static volatile boolean usrValuesQueried = false;
     private final ArrayList<MonitorModeListener> refMonitorModeListener = new ArrayList<MonitorModeListener>();
 
     private long tCreated; // creationTime
@@ -97,15 +98,21 @@ public abstract class ScreenImpl extends Screen implements MonitorModeListener {
 
     public static Screen create(final Display display, int idx) {
         try {
-            if(!usrSizeQueried) {
+            if(!usrValuesQueried) {
                 synchronized (Screen.class) {
-                    if(!usrSizeQueried) {
-                        usrSizeQueried = true;
-                        final int w = PropertyAccess.getIntProperty("newt.ws.swidth", true, 0);
-                        final int h = PropertyAccess.getIntProperty("newt.ws.sheight", true, 0);
-                        if(w>0 && h>0) {
-                            usrSize = new Dimension(w, h);
-                            System.err.println("User screen size "+usrSize);
+                    if(!usrValuesQueried) {
+                        usrValuesQueried = true;
+                        final int px_w = PropertyAccess.getIntProperty("newt.ws.swidth", true, 0);
+                        final int px_h = PropertyAccess.getIntProperty("newt.ws.sheight", true, 0);
+                        if(px_w>0 && px_h>0) {
+                            usrScreenPixelSize = new Dimension(px_w, px_h);
+                            System.err.println("User screen size "+usrScreenPixelSize+" [pixel]");
+                        }
+                        final int mm_w = PropertyAccess.getIntProperty("newt.ws.mmwidth", true, 0);
+                        final int mm_h = PropertyAccess.getIntProperty("newt.ws.mmheight", true, 0);
+                        if(mm_w>0 && mm_h>0) {
+                            usrMonitorMMSize = new Dimension(mm_w, mm_h);
+                            System.err.println("User monitor size "+usrMonitorMMSize+" [mm]");
                         }
                     }
                 }
@@ -177,7 +184,7 @@ public abstract class ScreenImpl extends Screen implements MonitorModeListener {
     {
         if(null == aScreen) {
             if(DEBUG) {
-                tCreated = System.nanoTime();
+                tCreated = Clock.currentNanos();
                 System.err.println("Screen.createNative() START ("+Display.getThreadName()+", "+this+")");
             } else {
                 tCreated = 0;
@@ -193,7 +200,7 @@ public abstract class ScreenImpl extends Screen implements MonitorModeListener {
             synchronized(screenList) {
                 screensActive++;
                 if(DEBUG) {
-                    System.err.println("Screen.createNative() END ("+Display.getThreadName()+", "+this+"), active "+screensActive+", total "+ (System.nanoTime()-tCreated)/1e6 +"ms");
+                    System.err.println("Screen.createNative() END ("+Display.getThreadName()+", "+this+"), active "+screensActive+", total "+ (Clock.currentNanos()-tCreated)/1e6 +"ms");
                 }
             }
             ScreenMonitorState.getScreenMonitorState(this.getFQName()).addListener(this);
@@ -292,9 +299,9 @@ public abstract class ScreenImpl extends Screen implements MonitorModeListener {
      * Updates the <b>rotated</b> virtual viewport, may use native impl.
      */
     protected void updateVirtualScreenOriginAndSize() {
-        if(null != usrSize ) {
-            virtViewportPU.set(0, 0, usrSize.getWidth(), usrSize.getHeight());
-            virtViewportWU.set(0, 0, usrSize.getWidth(), usrSize.getHeight());
+        if(null != usrScreenPixelSize ) {
+            virtViewportPU.set(0, 0, usrScreenPixelSize.getWidth(), usrScreenPixelSize.getHeight());
+            virtViewportWU.set(0, 0, usrScreenPixelSize.getWidth(), usrScreenPixelSize.getHeight());
             if(DEBUG) {
                 System.err.println("Update user virtual screen viewport @ "+Thread.currentThread().getName()+": "+virtViewportPU);
             }
@@ -360,8 +367,8 @@ public abstract class ScreenImpl extends Screen implements MonitorModeListener {
      *   <li>{@link MonitorModeProps#MIN_MONITOR_DEVICE_PROPERTIES}</li>
      * </ul>, i.e.
      * <ul>
-     *   <li>{@link MonitorModeProps#streamInMonitorDevice(jogamp.newt.MonitorModeProps.Cache, ScreenImpl, double[], int[], int, int[])}</li>
-     *   <li>{@link MonitorModeProps#streamInMonitorDevice(int[], jogamp.newt.MonitorModeProps.Cache, ArrayHashSet, int[], int, ScreenImpl)}</li>
+     *   <li>{@link MonitorModeProps#streamInMonitorDevice(jogamp.newt.MonitorModeProps.Cache, ScreenImpl, long, String, double[], boolean, int[], int, int[])}</li>
+     *   <li>{@link MonitorModeProps#streamInMonitorDevice(int[], jogamp.newt.MonitorModeProps.Cache, long, String, ArrayHashSet, boolean, int[], int, ScreenImpl)}</li>
      *   <li>{@link MonitorModeProps#streamInMonitorMode(int[], jogamp.newt.MonitorModeProps.Cache, int[], int)}</li>
      * </ul>
      * @param cache memory pool caching the result
@@ -520,7 +527,8 @@ public abstract class ScreenImpl extends Screen implements MonitorModeListener {
         if( MonitorModeProps.MIN_MONITOR_DEVICE_PROPERTIES != i ) {
             throw new InternalError("XX");
         }
-        return MonitorModeProps.streamInMonitorDevice(cache, this, null, props, 0, null);
+        final String monitor_name = null;
+        return MonitorModeProps.streamInMonitorDevice(cache, this, monitorId, monitor_name, null, false /* invscale_wuviewport */, props, 0, null);
     }
 
     /**
@@ -546,7 +554,7 @@ public abstract class ScreenImpl extends Screen implements MonitorModeListener {
     private final ScreenMonitorState initMonitorState() {
         long t0;
         if(DEBUG) {
-            t0 = System.nanoTime();
+            t0 = Clock.currentNanos();
             System.err.println("Screen.initMonitorState() START ("+Display.getThreadName()+", "+this+")");
         } else {
             t0 = 0;
@@ -606,7 +614,7 @@ public abstract class ScreenImpl extends Screen implements MonitorModeListener {
             ScreenMonitorState.unlockScreenMonitorState();
         }
         if(DEBUG) {
-            System.err.println("Screen.initMonitorState() END dt "+ (System.nanoTime()-t0)/1e6 +"ms");
+            System.err.println("Screen.initMonitorState() END dt "+ (Clock.currentNanos()-t0)/1e6 +"ms");
         }
         if( !vScrnSizeUpdated ) {
             updateVirtualScreenOriginAndSize();

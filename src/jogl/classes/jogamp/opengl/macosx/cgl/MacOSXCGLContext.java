@@ -101,17 +101,31 @@ public class MacOSXCGLContext extends GLContextImpl
         boolean swapBuffers();
   }
 
-  /* package */ static final boolean isTigerOrLater;
-  /* package */ static final boolean isLionOrLater;
-  /* package */ static final boolean isMavericksOrLater;
+  /* package */ static final boolean isLionOrLater; // >= 10.7.0
+  /* package */ static final boolean isMavericksOrLater; // >= 10.9.0
+  /* package */ static final boolean isMojaveOrLater; // >= 10.14.0
   private static final boolean DEBUG1398;
 
   static {
     final VersionNumber osvn = Platform.getOSVersionNumber();
-    isTigerOrLater = osvn.compareTo(Platform.OSXVersion.Tiger) >= 0;
-    isLionOrLater = osvn.compareTo(Platform.OSXVersion.Lion) >= 0;
-    isMavericksOrLater = osvn.compareTo(Platform.OSXVersion.Mavericks) >= 0;
-    DEBUG1398 = Debug.debug("Bug1398");
+    if( osvn.compareTo(MacOSVersion.Mojave) >= 0 ) {
+        isLionOrLater = true;
+        isMavericksOrLater = true;
+        isMojaveOrLater = true;
+    } else if( osvn.compareTo(MacOSVersion.Mavericks) >= 0 ) {
+        isLionOrLater = true;
+        isMavericksOrLater = true;
+        isMojaveOrLater = false;
+    } else if( osvn.compareTo(MacOSVersion.Lion) >= 0 ) {
+        isLionOrLater = true;
+        isMavericksOrLater = false;
+        isMojaveOrLater = false;
+    } else {
+        isLionOrLater = false;
+        isMavericksOrLater = false;
+        isMojaveOrLater = false;
+    }
+    DEBUG1398 = Debug.debugNotAll("Bug1398");
   }
 
   static boolean isGLProfileSupported(final int ctp, final int major, final int minor) {
@@ -369,16 +383,7 @@ public class MacOSXCGLContext extends GLContextImpl
               isIncompleteView = false;
             }
             if( !isIncompleteView ) {
-                if( useAppKit ) {
-                    OSXUtil.RunOnMainThread(true, false, new Runnable() {
-                        @Override
-                        public void run() {
-                            updateHandle = CGL.updateContextRegister(contextHandle, drawable.getHandle());
-                        }
-                    });
-                } else {
-                    updateHandle = CGL.updateContextRegister(contextHandle, drawable.getHandle());
-                }
+                updateHandle = CGL.updateContextRegister(contextHandle, drawable.getHandle(), false /* useAppKit .. onMain */);
                 if(0 == updateHandle) {
                     throw new InternalError("XXX2");
                 }
@@ -395,7 +400,6 @@ public class MacOSXCGLContext extends GLContextImpl
     }
   }
 
-  private static boolean useAppKit = false;
   @Override
   protected void drawableUpdatedNotify() throws GLException {
     if( drawable.getChosenGLCapabilities().isOnscreen() ) {
@@ -410,16 +414,7 @@ public class MacOSXCGLContext extends GLContextImpl
             if (contextHandle == 0) {
               throw new GLException("Context not created");
             }
-            if( useAppKit ) {
-                OSXUtil.RunOnMainThread(true, false, new Runnable() {
-                    @Override
-                    public void run() {
-                        CGL.updateContext(contextHandle);
-                    }
-                });
-            } else {
-                CGL.updateContext(contextHandle);
-            }
+            CGL.updateContext(contextHandle, true /* useAppKit .. onMain */);
         }
     }
   }
@@ -778,6 +773,8 @@ public class MacOSXCGLContext extends GLContextImpl
           long nsOpenGLLayer;
           /** Synchronized by instance's monitor */
           boolean done;
+          /** Synchronized by instance's monitor */
+          boolean revoke;
 
           AttachGLLayerCmd(final OffscreenLayerSurface ols, final long ctx, final int shaderProgram, final long pfmt, final long pbuffer, final int texID,
                            final boolean isOpaque, final int texWidth, final int texHeight, final int winWidth, final int winHeight) {
@@ -793,11 +790,12 @@ public class MacOSXCGLContext extends GLContextImpl
               this.winWidth = winWidth;
               this.winHeight = winHeight;
               this.done = false;
+              this.revoke = false;
               this.nsOpenGLLayer = 0;
           }
 
           public final String contentToString() {
-              return "done "+done+", size tex["+texWidth+"x"+texHeight+"], win["+winWidth+"x"+winHeight+"], ctx "+toHexString(ctx)+", opaque "+isOpaque+", texID "+texID+", pbuffer "+toHexString(pbuffer)+", nsOpenGLLayer "+toHexString(nsOpenGLLayer);
+              return "done "+done+", revoke "+revoke+", size tex["+texWidth+"x"+texHeight+"], win["+winWidth+"x"+winHeight+"], ctx "+toHexString(ctx)+", opaque "+isOpaque+", texID "+texID+", pbuffer "+toHexString(pbuffer)+", nsOpenGLLayer "+toHexString(nsOpenGLLayer);
           }
 
           @Override
@@ -808,7 +806,7 @@ public class MacOSXCGLContext extends GLContextImpl
           @Override
           public void run() {
               synchronized(this) {
-                  if( !done ) {
+                  if( !done && !revoke ) {
                       try {
                           final int maxwait = screenVSyncTimeout/2000; // TO 1/2 of current screen-vsync in [ms]
                           final RecursiveLock surfaceLock = ols.getLock();
@@ -877,7 +875,9 @@ public class MacOSXCGLContext extends GLContextImpl
                         System.err.println("Caught exception on thread "+getThreadName());
                         t.printStackTrace();
                     }
-                    CGL.releaseNSOpenGLLayer(cmd.nsOpenGLLayer);
+                    if( 0 != cmd.nsOpenGLLayer ) {
+                        CGL.releaseNSOpenGLLayer(cmd.nsOpenGLLayer);
+                    }
                     if(DEBUG) {
                         System.err.println("NSOpenGLLayer.Detach: OK, layer "+toHexString(cmd.nsOpenGLLayer)+" - "+getThreadName());
                     }
@@ -886,6 +886,7 @@ public class MacOSXCGLContext extends GLContextImpl
                 } else if(DEBUG) {
                     System.err.println("NSOpenGLLayer.Detach: Skipped "+toHexString(cmd.nsOpenGLLayer)+" - "+getThreadName());
                 }
+                cmd.revoke = true; // revoke is essential if attach hasn't been done yet.
                 cmd.notifyAll();
             }
         }
@@ -896,7 +897,7 @@ public class MacOSXCGLContext extends GLContextImpl
           backingLayerHost = NativeWindowFactory.getOffscreenLayerSurface(drawable.getNativeSurface(), true);
 
           if(DEBUG) {
-              System.err.println("MaxOSXCGLContext.NSOpenGLImpl.associateDrawable: "+bound+", ctx "+toHexString(contextHandle)+
+              System.err.println("MacOSXCGLContext.NSOpenGLImpl.associateDrawable: "+bound+", ctx "+toHexString(contextHandle)+
                                  ", hasBackingLayerHost "+(null!=backingLayerHost)+", attachGLLayerCmd "+attachGLLayerCmd);
               // Thread.dumpStack();
           }
@@ -955,9 +956,9 @@ public class MacOSXCGLContext extends GLContextImpl
                           backingLayerHost, ctx, gl3ShaderProgramName, pixelFormat, pbufferHandle, texID,
                           chosenCaps.isBackgroundOpaque(), lastWidth, lastHeight, winSize[0], winSize[1] );
                   if(DEBUG) {
-                      System.err.println("MaxOSXCGLContext.NSOpenGLImpl.associateDrawable(true).calayer: "+attachGLLayerCmd);
+                      System.err.println("MacOSXCGLContext.NSOpenGLImpl.associateDrawable(true).calayer: "+attachGLLayerCmd);
                   }
-                  OSXUtil.RunOnMainThread(false, false /* kickNSApp */, attachGLLayerCmd);
+                  OSXUtil.RunOnMainThread(false /* wait */, false /* kickNSApp */, attachGLLayerCmd);
               } else { // -> null == backingLayerHost
                   lastWidth = drawable.getSurfaceWidth();
                   lastHeight = drawable.getSurfaceHeight();
@@ -980,9 +981,9 @@ public class MacOSXCGLContext extends GLContextImpl
                           // All CALayer lifecycle ops are deferred on main-thread
                           final DetachGLLayerCmd dCmd = new DetachGLLayerCmd(cmd);
                           if(DEBUG) {
-                              System.err.println("MaxOSXCGLContext.NSOpenGLImpl.associateDrawable(false).calayer: "+dCmd+" - "+Thread.currentThread().getName());
+                              System.err.println("MacOSXCGLContext.NSOpenGLImpl.associateDrawable(false).calayer: "+dCmd+" - "+Thread.currentThread().getName());
                           }
-                          OSXUtil.RunOnMainThread(false, true /* kickNSApp */, dCmd);
+                          OSXUtil.RunOnMainThread(false /* wait */, true /* kickNSApp */, dCmd);
                           if( null != gl3ShaderProgram ) {
                               gl3ShaderProgram.destroy(MacOSXCGLContext.this.gl.getGL3());
                               gl3ShaderProgram = null;
@@ -1045,7 +1046,7 @@ public class MacOSXCGLContext extends GLContextImpl
               if(!insideContextMadeCurrent) {
                   System.err.println();
               }
-              System.err.println("MaxOSXCGLContext.makeCurrent Bug1398: recursive "+insideContextMadeCurrent+", nsViewChanged "+nsViewChanged+", isAWTEDT "+isAWTEventDispatchThread()+", "+Thread.currentThread());
+              System.err.println("MacOSXCGLContext.makeCurrent Bug1398: recursive "+insideContextMadeCurrent+", nsViewChanged "+nsViewChanged+", isAWTEDT "+isAWTEventDispatchThread()+", "+Thread.currentThread());
               System.err.println("  NSViewDescriptor: last "+lastNSViewDescr);
               System.err.println("  NSViewDescriptor: curr "+nsViewDescr);
           }
@@ -1057,13 +1058,14 @@ public class MacOSXCGLContext extends GLContextImpl
               OSXUtil.RunOnMainThread(false /* wait */, false /* kickNSApp */, cmd);
           }
           final boolean lockCGLContext;
-          if( null != lastSetNSViewCmd ) {
-              synchronized( lastSetNSViewCmd ) {
-                  lockCGLContext = lastSetNSViewCmd.done;
+          final SetNSViewCmd _lastSetNSViewCmd = lastSetNSViewCmd;
+          if( null != _lastSetNSViewCmd ) {
+              synchronized( _lastSetNSViewCmd ) {
+                  lockCGLContext = _lastSetNSViewCmd.done;
                   if( lockCGLContext ) {
                       lastSetNSViewCmd = null; // done, no more required
                   } else if( DEBUG1398 ) {
-                      System.err.println("MaxOSXCGLContext.makeCurrent Bug1398: Skip CGLLockContext, "+Thread.currentThread());
+                      System.err.println("MacOSXCGLContext.makeCurrent Bug1398: Skip CGLLockContext, "+Thread.currentThread());
                   }
               }
           } else {
@@ -1082,7 +1084,7 @@ public class MacOSXCGLContext extends GLContextImpl
           } else {
               cglContextLocked = false;
               if(DEBUG) {
-                  System.err.println("MaxOSXCGLContext.makeCurrent: Could not lock context: err 0x"+Integer.toHexString(err)+": "+this);
+                  System.err.println("MacOSXCGLContext.makeCurrent: Could not lock context: err 0x"+Integer.toHexString(err)+": "+this);
               }
               return false;
           }
@@ -1106,7 +1108,7 @@ public class MacOSXCGLContext extends GLContextImpl
                   final int surfaceLockCount = null != surfaceLock ? surfaceLock.getHoldCount() : 1;
 
                   if(DEBUG1398) {
-                      System.err.println("MaxOSXCGLContext.contextMadeCurrent.0 Bug1398: Cure missing CGLContextLock, "+Thread.currentThread());
+                      System.err.println("MacOSXCGLContext.contextMadeCurrent.0 Bug1398: Cure missing CGLContextLock, "+Thread.currentThread());
                       System.err.println("  SurfaceLock: "+surfaceLock);
                   }
                   // Reduce lock-count so context.release()'s surface.unlockSurface() will actually release the lock
@@ -1127,7 +1129,7 @@ public class MacOSXCGLContext extends GLContextImpl
                               t1 = Platform.currentTimeMillis();
                           }
                           if(DEBUG1398) {
-                              System.err.println("MaxOSXCGLContext.contextMadeCurrent.1 Bug1398: SetNSViewCmd[waited "+(t1-t0)+"ms, done "+_lastSetNSViewCmd.done+"], surfaceLock "+surfaceLock);
+                              System.err.println("MacOSXCGLContext.contextMadeCurrent.1 Bug1398: SetNSViewCmd[waited "+(t1-t0)+"ms, done "+_lastSetNSViewCmd.done+"], surfaceLock "+surfaceLock);
                           }
                           lastSetNSViewCmd = null; // if !done due to timeout, avoid another !cglContextLocked and hence SetNSViewCmd issuance
                       }
@@ -1156,7 +1158,7 @@ public class MacOSXCGLContext extends GLContextImpl
               }
           }
           if( DEBUG1398 ) {
-              System.err.println("MaxOSXCGLContext.release Bug1398: recursive "+insideContextMadeCurrent+", cglContextLocked "+cglContextLocked+", isAWTEDT "+isAWTEventDispatchThread()+", "+Thread.currentThread());
+              System.err.println("MacOSXCGLContext.release Bug1398: recursive "+insideContextMadeCurrent+", cglContextLocked "+cglContextLocked+", isAWTEDT "+isAWTEventDispatchThread()+", "+Thread.currentThread());
               if(!insideContextMadeCurrent) {
                   System.err.println();
               }
@@ -1174,7 +1176,8 @@ public class MacOSXCGLContext extends GLContextImpl
           if( !drawableAssociated ) {
               lastNSViewDescr = null;
               lastSetNSViewCmd = null;
-              OSXUtil.RunOnMainThread(true /* wait */, true /* kickNSApp */, new Runnable() {
+              final boolean wait = !MacOSXCGLContext.isMojaveOrLater; // wait if < 10.14
+              OSXUtil.RunOnMainThread(wait, true /* kickNSApp */, new Runnable() {
                   @Override
                   public void run() {
                       CGL.setContextView(ctx, 0);
@@ -1384,7 +1387,7 @@ public class MacOSXCGLContext extends GLContextImpl
                       try {
                           CGL.setContextView(ctx, nsViewDescr.nsViewHandle);
                           if (DEBUG1398) {
-                              System.err.println("MaxOSXCGLContext.SetNSViewCmd Bug1398: OK, drawable "+toHexString(drawable.hashCode())+", "+nsViewDescr+" - "+getThreadName());
+                              System.err.println("MacOSXCGLContext.SetNSViewCmd Bug1398: OK, drawable "+toHexString(drawable.hashCode())+", "+nsViewDescr+" - "+getThreadName());
                           }
                       } catch (final Throwable t) {
                           System.err.println("Caught exception on thread "+getThreadName());

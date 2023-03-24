@@ -1,5 +1,5 @@
 /**
- * Copyright 2011 JogAmp Community. All rights reserved.
+ * Copyright 2011-2023 JogAmp Community. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification, are
  * permitted provided that the following conditions are met:
@@ -37,13 +37,17 @@ import com.jogamp.opengl.GLUniformData;
 import jogamp.common.os.PlatformPropsImpl;
 import jogamp.graph.curve.opengl.shader.UniformNames;
 
-import com.jogamp.common.os.Platform;
 import com.jogamp.graph.curve.Region;
-import com.jogamp.graph.geom.Vertex;
 import com.jogamp.opengl.util.GLArrayDataServer;
 import com.jogamp.opengl.util.PMVMatrix;
 import com.jogamp.opengl.util.glsl.ShaderProgram;
 
+/**
+ * The RenderState is owned by {@link RegionRenderer}.
+ *
+ * It holds rendering state data like {@link PMVMatrix}, viewport,
+ * but also the current {@link #getColorStatic(float[]) static color}.
+ */
 public class RenderState {
     private static final String thisKey = "jogamp.graph.curve.RenderState" ;
 
@@ -82,19 +86,10 @@ public class RenderState {
      */
     public static final int BITHINT_GLOBAL_DEPTH_TEST_ENABLED = 1 << 1 ;
 
-    public static RenderState createRenderState(final Vertex.Factory<? extends Vertex> pointFactory) {
-        return new RenderState(pointFactory, null);
-    }
-
-    public static RenderState createRenderState(final Vertex.Factory<? extends Vertex> pointFactory, final PMVMatrix pmvMatrix) {
-        return new RenderState(pointFactory, pmvMatrix);
-    }
-
     public static final RenderState getRenderState(final GL2ES2 gl) {
         return (RenderState) gl.getContext().getAttachedObject(thisKey);
     }
 
-    private final Vertex.Factory<? extends Vertex> vertexFactory;
     private final PMVMatrix pmvMatrix;
     private final float[] weight;
     private final FloatBuffer weightBuffer;
@@ -110,7 +105,7 @@ public class RenderState {
     private static int nextID = 1;
 
     /**
-     * Representation of {@link RenderState} data for one {@link ShaderProgram}
+     * Representation of {@link RenderState} data per {@link ShaderProgram}
      * as {@link GLUniformData}.
      * <p>
      * FIXME: Utilize 'ARB_Uniform_Buffer_Object' where available!
@@ -143,6 +138,7 @@ public class RenderState {
          */
         public final boolean update(final GL2ES2 gl, final RenderState rs, final boolean updateLocation, final int renderModes, final boolean pass1, final boolean throwOnError) {
             if( rs.id() != rsId ) {
+                // Assignment of Renderstate buffers to uniforms (no copy, direct reference)
                 gcu_PMVMatrix01.setData(rs.pmvMatrix.glGetPMvMatrixf());
                 gcu_Weight.setData(rs.weightBuffer);
                 gcu_ColorStatic.setData(rs.colorStaticBuffer);
@@ -186,11 +182,14 @@ public class RenderState {
         }
     }
 
-    protected RenderState(final Vertex.Factory<? extends Vertex> vertexFactory, final PMVMatrix pmvMatrix) {
+    /**
+     * Create a RenderState, a composition of RegionRenderer
+     * @param sharedPMVMatrix optional shared PMVMatrix, if null using a local instance
+     */
+    /* pp */ RenderState(final PMVMatrix sharedPMVMatrix) {
         this.id = getNextID();
         this.sp = null;
-        this.vertexFactory = vertexFactory;
-        this.pmvMatrix = null != pmvMatrix ? pmvMatrix : new PMVMatrix();
+        this.pmvMatrix = null != sharedPMVMatrix ? sharedPMVMatrix : new PMVMatrix();
         this.weight = new float[1];
         this.weightBuffer = FloatBuffer.wrap(weight);
         this.colorStatic = new float[4];
@@ -199,14 +198,20 @@ public class RenderState {
     }
 
     public final int id() { return id; }
+
+    /** Return the current {@link ShaderProgram} */
     public final ShaderProgram getShaderProgram() { return sp; }
+
+    /** Return whether the current {@link ShaderProgram} is {@link ShaderProgram#inUse() in use}. */
     public final boolean isShaderProgramInUse() { return null != sp ? sp.inUse() : false; }
 
     /**
-     * Set a {@link ShaderProgram} and enable it. If the given {@link ShaderProgram} is new,
-     * method returns true, otherwise false.
+     * Sets the current {@link ShaderProgram} and enables it.
+     *
+     * If the given {@link ShaderProgram} is not {@link #getShaderProgram() the current}, method returns true, otherwise false.
+     *
      * @param gl
-     * @param spNext
+     * @param spNext the next current {@link ShaderProgram} to be set and enabled
      * @return true if a new shader program is being used and hence external uniform-data and -location,
      *         as well as the attribute-location must be updated, otherwise false.
      */
@@ -222,8 +227,6 @@ public class RenderState {
         spNext.useProgram(gl, true);
         return true;
     }
-
-    public final Vertex.Factory<? extends Vertex> getVertexFactory() { return vertexFactory; }
 
     public final PMVMatrix getMatrix() { return pmvMatrix; }
 
@@ -263,7 +266,8 @@ public class RenderState {
         if( updateLocation || 0 > data.getLocation() ) {
             final boolean ok = 0 <= data.setLocation(gl, sp.program());
             if( throwOnError && !ok ) {
-                throw new GLException("Could not locate "+data);
+                sp.dumpSource(System.err);
+                throw new GLException("Could not locate "+data.getName()+" in "+sp+", "+data);
             }
             return ok;
         } else {
@@ -285,7 +289,8 @@ public class RenderState {
         if( updateLocation ) {
             updateData = 0 <= data.setLocation(gl, sp.program());
             if( throwOnError && !updateData ) {
-                throw new GLException("Could not locate "+data);
+                sp.dumpSource(System.err);
+                throw new GLException("Could not locate "+data.getName()+" in "+sp+", "+data);
             }
         }
         if( updateData ){
@@ -306,7 +311,8 @@ public class RenderState {
         if( updateLocation || 0 > data.getLocation() ) {
             final boolean ok = 0 <= data.setLocation(gl, sp.program());
             if( throwOnError && !ok ) {
-                throw new GLException("Could not locate "+data);
+                sp.dumpSource(System.err);
+                throw new GLException("Could not locate "+data.getName()+" in "+sp+", "+data);
             }
             return ok;
         } else {
@@ -325,11 +331,11 @@ public class RenderState {
         hintBitfield &= ~mask;
     }
 
-    public void destroy(final GL2ES2 gl) {
-        if( null != sp ) {
-            sp.destroy(gl);
-            sp = null;
-        }
+    /**
+     * Only nullifies {@link ShaderProgram} reference owned by {@link RegionRenderer}.
+     */
+    /* pp */ void destroy() {
+        sp = null; // owned by RegionRenderer
     }
 
     public final RenderState attachTo(final GL2ES2 gl) {

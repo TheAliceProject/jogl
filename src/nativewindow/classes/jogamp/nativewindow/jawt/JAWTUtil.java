@@ -45,7 +45,6 @@ import java.awt.Toolkit;
 import java.awt.geom.AffineTransform;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.util.ArrayList;
 import java.util.Map;
@@ -67,6 +66,7 @@ import jogamp.nativewindow.x11.X11Lib;
 import com.jogamp.common.ExceptionUtils;
 import com.jogamp.common.os.Platform;
 import com.jogamp.common.util.PropertyAccess;
+import com.jogamp.common.util.SecurityUtil;
 import com.jogamp.common.util.UnsafeUtil;
 import com.jogamp.common.util.VersionNumber;
 import com.jogamp.common.util.locks.LockFactory;
@@ -80,11 +80,10 @@ public class JAWTUtil {
   /** OSX JAWT version option to use CALayer */
   public static final int JAWT_MACOSX_USE_CALAYER = 0x80000000;
 
-  /** OSX JAWT CALayer availability on Mac OS X >= 10.6 Update 4 (recommended) */
-  public static final VersionNumber JAWT_MacOSXCALayerMinVersion = new VersionNumber(10,6,4);
-
   /** OSX JAWT CALayer required with Java >= 1.7.0 (implies OS X >= 10.7  */
-  public static final VersionNumber JAWT_MacOSXCALayerRequiredForJavaVersion = Platform.Version17;
+  private static final int MacOS_JVM_1_7_COMPARE;
+  /** OSX JAWT CALayer availability on Mac OS X >= 10.6 Update 4 (recommended) */
+  private static final int MacOS_10_6_4_COMPARE;
 
   // See whether we're running in headless mode
   private static final boolean headlessMode;
@@ -123,18 +122,20 @@ public class JAWTUtil {
 
   /**
    * Returns true if this platform's JAWT implementation supports offscreen layer.
+   *
+   * Currently only JAWT on MacOS >= 10.6.4 supports offscreen rendering.
    */
   public static boolean isOffscreenLayerSupported() {
-    return PlatformPropsImpl.OS_TYPE == Platform.OSType.MACOS &&
-           PlatformPropsImpl.OS_VERSION_NUMBER.compareTo(JAWTUtil.JAWT_MacOSXCALayerMinVersion) >= 0;
+    return PlatformPropsImpl.OS_TYPE == Platform.OSType.MACOS && MacOS_10_6_4_COMPARE >= 0;
   }
 
   /**
    * Returns true if this platform's JAWT implementation requires using offscreen layer.
+   *
+   * Currently only JAWT on MacOS with JVM >= 1.7 supports offscreen rendering.
    */
   public static boolean isOffscreenLayerRequired() {
-    return PlatformPropsImpl.OS_TYPE == Platform.OSType.MACOS &&
-           PlatformPropsImpl.JAVA_VERSION_NUMBER.compareTo(JAWT_MacOSXCALayerRequiredForJavaVersion)>=0;
+    return PlatformPropsImpl.OS_TYPE == Platform.OSType.MACOS && MacOS_JVM_1_7_COMPARE >= 0;
   }
 
   /**
@@ -238,14 +239,11 @@ public class JAWTUtil {
    */
   public static int getOSXCALayerQuirks() {
     int res = 0;
-    if( PlatformPropsImpl.OS_TYPE == Platform.OSType.MACOS &&
-        PlatformPropsImpl.OS_VERSION_NUMBER.compareTo(JAWTUtil.JAWT_MacOSXCALayerMinVersion) >= 0 ) {
-
+    if( PlatformPropsImpl.OS_TYPE == Platform.OSType.MACOS && MacOS_10_6_4_COMPARE >= 0 ) {
         /** Knowing impl. all expose the SIZE bug */
         res |= JAWT_OSX_CALAYER_QUIRK_SIZE;
 
-        final int c = PlatformPropsImpl.JAVA_VERSION_NUMBER.compareTo(PlatformPropsImpl.Version17);
-        if( c < 0 || c == 0 && PlatformPropsImpl.JAVA_VERSION_UPDATE < 40 ) {
+        if( MacOS_JVM_1_7_COMPARE < 0 || MacOS_JVM_1_7_COMPARE == 0 && PlatformPropsImpl.JAVA_VERSION_UPDATE < 40 ) {
             res |= JAWT_OSX_CALAYER_QUIRK_POSITION;
         } else {
             res |= JAWT_OSX_CALAYER_QUIRK_LAYOUT;
@@ -269,7 +267,7 @@ public class JAWTUtil {
 
     if(isOffscreenLayerRequired()) {
         if(PlatformPropsImpl.OS_TYPE == Platform.OSType.MACOS) {
-            if(PlatformPropsImpl.OS_VERSION_NUMBER.compareTo(JAWTUtil.JAWT_MacOSXCALayerMinVersion) >= 0) {
+            if(MacOS_10_6_4_COMPARE >= 0) {
                 jawt_version_flags_offscreen |= JAWTUtil.JAWT_MACOSX_USE_CALAYER;
                 tryOffscreenLayer = true;
                 tryOnscreen = false;
@@ -326,6 +324,14 @@ public class JAWTUtil {
         // Thread.dumpStack();
     }
 
+    if( PlatformPropsImpl.OS_TYPE == Platform.OSType.MACOS ) {
+        MacOS_JVM_1_7_COMPARE = PlatformPropsImpl.JAVA_VERSION_NUMBER.compareTo(new VersionNumber(1, 7, 0));
+        MacOS_10_6_4_COMPARE = PlatformPropsImpl.OS_VERSION_NUMBER.compareTo(new VersionNumber(10,6,4));
+    } else {
+        MacOS_JVM_1_7_COMPARE = -1;
+        MacOS_10_6_4_COMPARE = -1;
+    }
+
     headlessMode = GraphicsEnvironment.isHeadless();
 
     if( headlessMode ) {
@@ -362,7 +368,7 @@ public class JAWTUtil {
         // Always enforce using sun.awt.SunToolkit's awtLock even on JVM >= Java_9,
         // as we have no other official means to synchronize native UI locks especially for X11
         {
-            final SunToolkitData std = AccessController.doPrivileged(new PrivilegedAction<SunToolkitData>() {
+            final SunToolkitData std = SecurityUtil.doPrivileged(new PrivilegedAction<SunToolkitData>() {
                 @Override
                 public SunToolkitData run() {
                     return UnsafeUtil.doWithoutIllegalAccessLogger(new PrivilegedAction<SunToolkitData>() {
@@ -407,7 +413,7 @@ public class JAWTUtil {
             gdGetScaleFactorMID = null;
             gdGetCGDisplayIDMIDOnOSX = null;
         } else {
-            final GraphicsDeviceData gdd = (GraphicsDeviceData) AccessController.doPrivileged(new PrivilegedAction<Object>() {
+            final GraphicsDeviceData gdd = (GraphicsDeviceData) SecurityUtil.doPrivileged(new PrivilegedAction<Object>() {
                 @Override
                 public Object run() {
                     final GraphicsDeviceData d = new GraphicsDeviceData();
@@ -658,7 +664,7 @@ public class JAWTUtil {
       boolean gotSXZ = false;
       if( !SKIP_AWT_HIDPI ) {
           if( null != gdGetCGDisplayIDMIDOnOSX ) {
-              // OSX specific for Java<9, preserving double type
+              // OSX specific for Java < 9, preserving double type
               try {
                   final Object res = gdGetCGDisplayIDMIDOnOSX.invoke(device);
                   if (res instanceof Integer) {
@@ -670,7 +676,7 @@ public class JAWTUtil {
               } catch (final Throwable t) {}
           }
           if( !gotSXZ && null != gdGetScaleFactorMID ) {
-              // Generic for Java<9
+              // Generic for Java < 9
               try {
                   final Object res = gdGetScaleFactorMID.invoke(device);
                   if (res instanceof Integer) {

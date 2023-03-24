@@ -35,6 +35,7 @@ import com.jogamp.graph.curve.tess.Triangulator;
 import com.jogamp.graph.geom.Outline;
 import com.jogamp.graph.geom.Triangle;
 import com.jogamp.graph.geom.Vertex;
+import com.jogamp.graph.geom.plane.Winding;
 import com.jogamp.opengl.math.VectorUtil;
 
 import jogamp.opengl.Debug;
@@ -79,20 +80,20 @@ public class CDTriangulator2D implements Triangulator {
 
     @Override
     public final void addCurve(final List<Triangle> sink, final Outline polyline, final float sharpness) {
-        Loop loop = null;
-
-        if(!loops.isEmpty()) {
-            loop = getContainerLoop(polyline);
-        }
+        Loop loop = getContainerLoop(polyline);
 
         if(loop == null) {
-            final GraphOutline outline = new GraphOutline(polyline);
+            final Winding winding = Winding.CCW; // -> HEdge.BOUNDARY
+            // Too late: polyline.setWinding(winding);
+            final GraphOutline outline = new GraphOutline(polyline); // , winding);
             final GraphOutline innerPoly = extractBoundaryTriangles(sink, outline, false, sharpness);
             // vertices.addAll(polyline.getVertices());
-            loop = new Loop(innerPoly, VectorUtil.Winding.CCW);
+            loop = new Loop(innerPoly, winding);
             loops.add(loop);
         } else {
-            final GraphOutline outline = new GraphOutline(polyline);
+            // final Winding winding = Winding.CW; // -> HEdge.HOLE
+            // Not required, handled in Loop.initFromPolyline(): polyline.setWinding(winding);
+            final GraphOutline outline = new GraphOutline(polyline); // , winding);
             final GraphOutline innerPoly = extractBoundaryTriangles(sink, outline, true, sharpness);
             // vertices.addAll(innerPoly.getVertices());
             loop.addConstraintCurve(innerPoly);
@@ -108,22 +109,25 @@ public class CDTriangulator2D implements Triangulator {
             int size = loop.computeLoopSize();
             while(!loop.isSimplex()){
                 final Triangle tri;
+                final boolean delauny;
                 if(numTries > size){
                     tri = loop.cut(false);
+                    delauny = false;
                 }
                 else{
                     tri = loop.cut(true);
+                    delauny = true;
                 }
                 numTries++;
 
                 if(tri != null) {
-                    numTries = 0;
-                    size--;
                     tri.setId(maxTriID++);
                     sink.add(tri);
                     if(DEBUG){
-                        System.err.println("CDTri.gen["+i+"].0: "+tri);
+                        System.err.println("CDTri.gen["+i+"].0: delauny "+delauny+", tries "+numTries+", size "+size+", "+tri);
                     }
+                    numTries = 0;
+                    size--;
                 }
                 if(numTries > size*2){
                     if(DEBUG){
@@ -181,7 +185,7 @@ public class CDTriangulator2D implements Triangulator {
 
                 final Triangle t;
                 final boolean holeLike;
-                if(VectorUtil.ccw(v0,v1,v2)) {
+                if(VectorUtil.isCCW(v0,v1,v2)) {
                     holeLike = false;
                     t = new Triangle(v0, v1, v2, boundaryVertices);
                 } else {
@@ -220,12 +224,15 @@ public class CDTriangulator2D implements Triangulator {
     }
 
     private Loop getContainerLoop(final Outline polyline) {
-        final ArrayList<Vertex> vertices = polyline.getVertices();
-        for(int i=0; i < loops.size(); i++) {
-            final Loop loop = loops.get(i);
-            for(int j=0; j < vertices.size(); j++) {
-                if( loop.checkInside( vertices.get(j) ) ) {
-                    return loop;
+        final int count = loops.size();
+        if( 0 < count ) {
+            final ArrayList<Vertex> vertices = polyline.getVertices();
+            for(int i=0; i < count; i++) {
+                final Loop loop = loops.get(i);
+                for(int j=0; j < vertices.size(); j++) {
+                    if( loop.checkInside( vertices.get(j) ) ) {
+                        return loop;
+                    }
                 }
             }
         }

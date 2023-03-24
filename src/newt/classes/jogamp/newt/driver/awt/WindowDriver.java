@@ -49,6 +49,7 @@ import jogamp.nativewindow.awt.AWTMisc;
 import jogamp.newt.WindowImpl;
 
 import com.jogamp.common.os.Platform;
+import com.jogamp.common.util.awt.AWTEDTExecutor;
 import com.jogamp.nativewindow.awt.AWTGraphicsConfiguration;
 import com.jogamp.nativewindow.awt.AWTGraphicsDevice;
 import com.jogamp.nativewindow.awt.AWTGraphicsScreen;
@@ -97,7 +98,11 @@ public class WindowDriver extends WindowImpl {
     @Override
     protected void setTitleImpl(final String title) {
         if (awtFrame != null) {
-            awtFrame.setTitle(title);
+            AWTEDTExecutor.singleton.invoke(false, new Runnable() {
+                @Override
+                public void run() {
+                    awtFrame.setTitle(title);
+                } } );
         }
     }
 
@@ -114,10 +119,10 @@ public class WindowDriver extends WindowImpl {
     };
 
     @Override
-    protected void createNativeImpl() {
+    protected void createNativeImpl(boolean[] positionModified) {
         if( withinLocalDispose ) {
             setupHandleAndGC();
-            definePosition(getX(), getY()); // clear AUTOPOS
+            defineWindowPosition(getX(), getY()); // clear AUTOPOS
             visibleChanged(true);
             withinLocalDispose = false;
         } else {
@@ -131,8 +136,8 @@ public class WindowDriver extends WindowImpl {
                 owningFrame=true;
             } else {
                 owningFrame=false;
-                defineSize(awtContainer.getWidth(), awtContainer.getHeight());
-                definePosition(awtContainer.getX(), awtContainer.getY());
+                defineWindowSize(awtContainer.getWidth(), awtContainer.getHeight());
+                defineWindowPosition(awtContainer.getX(), awtContainer.getY());
             }
             if(null!=awtFrame) {
                 awtFrame.setTitle(getTitle());
@@ -287,7 +292,7 @@ public class WindowDriver extends WindowImpl {
                 setCanvasSizeImpl(width, height);
                 awtContainer.setVisible( true );
                 final Insets contInsets = awtContainer.getInsets();
-                insetsChanged(contInsets.left, contInsets.right, contInsets.top, contInsets.bottom);
+                insetsChanged(false, contInsets.left, contInsets.right, contInsets.top, contInsets.bottom);
             } else {
                 awtContainer.setVisible( false );
             }
@@ -298,12 +303,12 @@ public class WindowDriver extends WindowImpl {
                 setCanvasSizeImpl(width, height);
             }
         }
-        defineSize(width, height); // we are on AWT-EDT .. change values immediately
+        defineWindowSize(width, height); // we are on AWT-EDT .. change values immediately
 
         if( awtContainer.getX() != x || awtContainer.getY() != y ) {
             awtContainer.setLocation(x, y);
         }
-        definePosition(x, y);
+        defineWindowPosition(x, y);
 
         if( 0 != ( CHANGE_MASK_VISIBILITY & flags) ) {
             if( 0 != ( STATE_MASK_VISIBLE & flags ) ) {
@@ -341,7 +346,7 @@ public class WindowDriver extends WindowImpl {
         @Override
         public void windowMoved(final com.jogamp.newt.event.WindowEvent e) {
             if(null!=awtContainer) {
-                WindowDriver.this.positionChanged(false, awtContainer.getX(), awtContainer.getY());
+                WindowDriver.this.positionChanged(false, true, awtContainer.getX(), awtContainer.getY());
             }
         }
         @Override
@@ -350,7 +355,7 @@ public class WindowDriver extends WindowImpl {
                 if(DEBUG_IMPLEMENTATION) {
                     System.err.println("Window Resized: "+awtCanvas);
                 }
-                WindowDriver.this.sizeChanged(false, awtCanvas.getWidth(), awtCanvas.getHeight(), true);
+                WindowDriver.this.sizeChanged(false, false, awtCanvas.getWidth(), awtCanvas.getHeight(), true);
                 WindowDriver.this.windowRepaint(false, 0, 0, getSurfaceWidth(), getSurfaceHeight());
             }
         }

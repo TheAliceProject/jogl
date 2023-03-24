@@ -228,9 +228,7 @@ public abstract class Screen {
         MonitorDevice res = null;
         float maxCoverage = Float.MIN_VALUE;
         final List<MonitorDevice> monitors = getMonitorDevices();
-        final int monitorCount = monitors.size();
-        for(int i=0; i<monitorCount; i++) {
-            final MonitorDevice monitor = monitors.get(i);
+        for(final MonitorDevice monitor : monitors) {
             if( !monitor.isClone() ) {
                 final float coverage = monitor.getViewportInWindowUnits().coverage(r);
                 if( coverage > maxCoverage ) {
@@ -245,12 +243,66 @@ public abstract class Screen {
         return monitors.get(0);
     }
 
-    public final MonitorDevice getMonitor(final int monitorId) {
-        final List<MonitorDevice> monitors = getMonitorDevices();
-        final int monitorCount = monitors.size();
-        for(int i=0; i<monitorCount; i++) {
-            final MonitorDevice monitor = monitors.get(i);
+    /**
+     * Returns the {@link MonitorDevice} which completely which {@link MonitorDevice#getViewportInWindowUnits() viewport}
+     * completely {@link RectangleImmutable#contains(RectangleImmutable) coverage} the given rectangle in window units,
+     * which is not a {@link MonitorDevice#isClone() clone}.
+     * <p>
+     * If no match is found, null is being returned
+     * </p>
+     * @param r arbitrary rectangle in window units
+     */
+    public final MonitorDevice getFullyEnteredMonitor(final RectangleImmutable r) {
+        for(final MonitorDevice monitor : getMonitorDevices()) {
+            if( !monitor.isClone() && monitor.getViewportInWindowUnits().contains(r) ) {
+                return monitor;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Returns the {@link MonitorDevice} which matches the given integer monitorId.
+     * <p>
+     * If no match is found, null is being returned
+     * </p>
+     */
+    public final MonitorDevice getMonitorById(final int monitorId) {
+        for(final MonitorDevice monitor : getMonitorDevices()) {
             if( monitor.getId() == monitorId ) {
+                return monitor;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Returns the {@link MonitorDevice} which matches the given long monitorHandle.
+     * <p>
+     * If no match is found, null is being returned
+     * </p>
+     */
+    public final MonitorDevice getMonitorByHandle(final long monitorHandle) {
+        for(final MonitorDevice monitor : getMonitorDevices()) {
+            if( monitor.getHandle() == monitorHandle ) {
+                return monitor;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Returns the {@link MonitorDevice} which matches the given name.
+     * <p>
+     * If no match is found or the given name is null or empty, null is being returned
+     * </p>
+     */
+    public final MonitorDevice getMonitorByName(final String name) {
+        if( null == name || name.isEmpty() ) {
+            return null;
+        }
+        for(final MonitorDevice monitor : getMonitorDevices()) {
+            if( name.equals( monitor.getName() ) ) {
                 return monitor;
             }
         }

@@ -36,7 +36,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.io.PrintStream;
 
-public class ShaderProgram {
+public final class ShaderProgram {
 
     public ShaderProgram() {
         id = getNextID();
@@ -103,6 +103,7 @@ public class ShaderProgram {
             gl.glDeleteProgram(shaderProgram);
             shaderProgram=0;
         }
+        programLinked=false;
     }
 
     //
@@ -282,9 +283,13 @@ public class ShaderProgram {
             sb = new StringBuilder();
         }
         sb.append("ShaderProgram[id=").append(id);
-        sb.append(", linked="+programLinked+", inUse="+programInUse+", program: "+shaderProgram+",");
-        for(final Iterator<ShaderCode> iter=allShaderCode.iterator(); iter.hasNext(); ) {
-            sb.append(Platform.getNewline()).append("   ").append(iter.next());
+        sb.append(", linked="+programLinked+", inUse="+programInUse+", program: "+shaderProgram+", "+allShaderCode.size()+" code: ");
+        if( 0 < allShaderCode.size() ) {
+            for(final Iterator<ShaderCode> iter=allShaderCode.iterator(); iter.hasNext(); ) {
+                sb.append(Platform.getNewline()).append("   ").append(iter.next());
+            }
+        } else {
+            sb.append("none");
         }
         sb.append("]");
         return sb;
@@ -304,7 +309,10 @@ public class ShaderProgram {
     }
 
     public synchronized void useProgram(final GL2ES2 gl, boolean on) {
-        if(!programLinked) { throw new GLException("Program is not linked"); }
+        if(on && !programLinked) {
+            System.err.println("Error: ShaderProgram.useProgram(on "+on+") not linked: "+this);
+            throw new GLException("Program is not linked");
+        }
         if(programInUse==on) { return; }
         if( 0 == shaderProgram ) {
             on = false;
@@ -314,6 +322,15 @@ public class ShaderProgram {
     }
     public synchronized void notifyNotInUse() {
         programInUse = false;
+    }
+
+    public void dumpSource(final PrintStream out) {
+        out.println();
+        out.println(toString());
+        for(final Iterator<ShaderCode> iter=allShaderCode.iterator(); iter.hasNext(); ) {
+            iter.next().dumpSource(out);
+        }
+        out.println();
     }
 
     private boolean programLinked = false;

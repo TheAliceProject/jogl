@@ -27,8 +27,7 @@
  */
 package com.jogamp.opengl.math.geom;
 
-import jogamp.graph.geom.plane.AffineTransform;
-
+import com.jogamp.graph.geom.plane.AffineTransform;
 import com.jogamp.opengl.math.FloatUtil;
 import com.jogamp.opengl.math.Quaternion;
 import com.jogamp.opengl.math.Ray;
@@ -57,8 +56,12 @@ public class AABBox {
     private final float[] center = new float[3];
 
     /**
-     * Create an Axis Aligned bounding box (AABBox)
-     * where the low and and high MAX float Values.
+     * Create an Axis Aligned bounding box (AABBox) with the
+     * inverse low/high, allowing the next {@link #resize(float, float, float)} command to hit.
+     * <p>
+     * The dimension, i.e. {@link #getWidth()} abd {@link #getHeight()} is {@link Float#isInfinite()} thereafter.
+     * </p>
+     * @see #reset()
      */
     public AABBox() {
         reset();
@@ -97,7 +100,10 @@ public class AABBox {
     }
 
     /**
-     * resets this box to the inverse low/high, allowing the next {@link #resize(float, float, float)} command to hit.
+     * Resets this box to the inverse low/high, allowing the next {@link #resize(float, float, float)} command to hit.
+     * <p>
+     * The dimension, i.e. {@link #getWidth()} abd {@link #getHeight()} is {@link Float#isInfinite()} thereafter.
+     * </p>
      * @return this AABBox for chaining
      */
     public final AABBox reset() {
@@ -583,10 +589,14 @@ public class AABBox {
     }
 
     /**
-     * Scale this AABBox by a constant
+     * Scale this AABBox by a constant around fixed center
+     * <p>
+     * high and low is recomputed by scaling its distance to fixed center.
+     * </p>
      * @param size a constant float value
      * @param tmpV3 caller provided temporary 3-component vector
      * @return this AABBox for chaining
+     * @see #scale2(float, float[])
      */
     public final AABBox scale(final float size, final float[] tmpV3) {
         tmpV3[0] = high[0] - center[0];
@@ -602,6 +612,23 @@ public class AABBox {
 
         VectorUtil.scaleVec3(tmpV3, tmpV3, size); // in-place scale
         VectorUtil.addVec3(low, center, tmpV3);
+        return this;
+    }
+
+    /**
+     * Scale this AABBox by a constant, recomputing center
+     * <p>
+     * high and low is scaled and center recomputed.
+     * </p>
+     * @param size a constant float value
+     * @param tmpV3 caller provided temporary 3-component vector
+     * @return this AABBox for chaining
+     * @see #scale(float, float[])
+     */
+    public final AABBox scale2(final float size, final float[] tmpV3) {
+        VectorUtil.scaleVec3(high, high, size); // in-place scale
+        VectorUtil.scaleVec3(low, low, size); // in-place scale
+        computeCenter();
         return this;
     }
 

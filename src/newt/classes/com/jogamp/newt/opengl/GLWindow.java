@@ -34,7 +34,6 @@
 
 package com.jogamp.newt.opengl;
 
-import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.util.List;
 
@@ -74,6 +73,8 @@ import jogamp.opengl.GLContextImpl;
 import jogamp.opengl.GLDrawableImpl;
 
 import com.jogamp.common.GlueGenVersion;
+import com.jogamp.common.os.Clock;
+import com.jogamp.common.util.SecurityUtil;
 import com.jogamp.common.util.VersionUtil;
 import com.jogamp.common.util.locks.RecursiveLock;
 import com.jogamp.newt.MonitorDevice;
@@ -467,6 +468,11 @@ public class GLWindow extends GLAutoDrawableBase implements GLAutoDrawable, Wind
     }
 
     @Override
+    public final Rectangle getSurfaceBounds() {
+        return window.getSurfaceBounds();
+    }
+
+    @Override
     public final int[] convertToWindowUnits(final int[] pixelUnitsAndResult) {
         return window.convertToWindowUnits(pixelUnitsAndResult);
     }
@@ -674,7 +680,7 @@ public class GLWindow extends GLAutoDrawableBase implements GLAutoDrawable, Wind
         public synchronized void setVisibleActionPost(final boolean visible, final boolean nativeWindowCreated) {
             long t0;
             if(Window.DEBUG_IMPLEMENTATION) {
-                t0 = System.nanoTime();
+                t0 = Clock.currentNanos();
                 System.err.println("GLWindow.setVisibleActionPost("+visible+", "+nativeWindowCreated+") "+WindowImpl.getThreadName()+", start");
             } else {
                 t0 = 0;
@@ -705,7 +711,7 @@ public class GLWindow extends GLAutoDrawableBase implements GLAutoDrawable, Wind
                 }
             }
             if(Window.DEBUG_IMPLEMENTATION) {
-                System.err.println("GLWindow.setVisibleActionPost("+visible+", "+nativeWindowCreated+") "+WindowImpl.getThreadName()+", fin: dt "+ (System.nanoTime()-t0)/1e6 +"ms");
+                System.err.println("GLWindow.setVisibleActionPost("+visible+", "+nativeWindowCreated+") "+WindowImpl.getThreadName()+", fin: dt "+ (Clock.currentNanos()-t0)/1e6 +"ms");
             }
         }
 
@@ -739,7 +745,7 @@ public class GLWindow extends GLAutoDrawableBase implements GLAutoDrawable, Wind
                 if( animThread == Thread.currentThread() ) {
                     anim.stop(); // on anim thread, non-blocking
                 } else {
-                    AccessController.doPrivileged(new PrivilegedAction<Object>() {
+                    SecurityUtil.doPrivileged(new PrivilegedAction<Object>() {
                         @Override
                         public Object run() {
                             if( anim.isAnimating() && null != animThread ) {

@@ -84,11 +84,13 @@ public class TestParentingFocus02SwingAWTRobot extends UITestCase {
 
         final JFrame f = new JFrame();
         javax.swing.SwingUtilities.invokeAndWait(new Runnable() {
+            @Override
             public void run() {
                 f.setSize(100,100);
                 f.setVisible(true);
             } } );
         javax.swing.SwingUtilities.invokeAndWait(new Runnable() {
+            @Override
             public void run() {
                 f.dispose();
             } } );
@@ -168,6 +170,7 @@ public class TestParentingFocus02SwingAWTRobot extends UITestCase {
         jFrame1.setContentPane(jPanel1);
         jFrame1.setSize(width, height);
         javax.swing.SwingUtilities.invokeAndWait(new Runnable() {
+            @Override
             public void run() {
                 jFrame1.setVisible(true);
             } } );
@@ -190,13 +193,13 @@ public class TestParentingFocus02SwingAWTRobot extends UITestCase {
 
         // Button Outer Focus
         Thread.sleep(100); // allow event sync
-        System.err.println("FOCUS AWT  Button Outer request");
+        System.err.println("FOCUS AWT  Button Outer request.1");
         EventCountAdapterUtil.reset(eventCountAdapters);
         AWTRobotUtil.assertRequestFocusAndWait(robot, buttonNorthOuter, buttonNorthOuter, buttonNorthOuterFA, null); // OSX sporadically buttonNorthOuter did not gain - major UI failure
         Assert.assertEquals(false, glWindow1FA.focusGained());
         Assert.assertEquals(false, newtCanvasAWTFA.focusGained());
         Assert.assertEquals(false, buttonNorthInnerFA.focusGained());
-        System.err.println("FOCUS AWT  Button Outer sync");
+        System.err.println("FOCUS AWT  Button Outer sync.1");
         AWTRobotUtil.assertKeyType(robot, java.awt.event.KeyEvent.VK_A, 2, buttonNorthOuter, buttonNorthOuterKA); // OSX sporadically won't receive the keyboard input - major UI failure
         AWTRobotUtil.assertMouseClick(robot, java.awt.event.InputEvent.BUTTON1_MASK, 1,
                                       buttonNorthOuter, buttonNorthOuterMA);
@@ -205,7 +208,7 @@ public class TestParentingFocus02SwingAWTRobot extends UITestCase {
 
         // NEWT Focus
         Thread.sleep(100); // allow event sync
-        System.err.println("FOCUS NEWT Canvas/GLWindow request");
+        System.err.println("FOCUS NEWT Canvas/GLWindow request.2");
         EventCountAdapterUtil.reset(eventCountAdapters);
         AWTRobotUtil.assertRequestFocusAndWait(robot, newtCanvasAWT, newtCanvasAWT.getNEWTChild(), glWindow1FA, buttonNorthOuterFA);
         // Manually tested on Java7/[Linux,Windows] (where this assertion failed),
@@ -216,13 +219,16 @@ public class TestParentingFocus02SwingAWTRobot extends UITestCase {
             System.err.println("Info: Focus prev. gained, but NewtCanvasAWT didn't loose it. Gainer: "+glWindow1FA+"; Looser "+newtCanvasAWTFA);
         }
         Assert.assertEquals(false, buttonNorthInnerFA.focusGained());
-        System.err.println("FOCUS NEWT Canvas/GLWindow sync");
+        System.err.println("FOCUS NEWT Canvas/GLWindow sync.2");
         AWTRobotUtil.assertKeyType(robot, java.awt.event.KeyEvent.VK_A, 2, glWindow1, glWindow1KA);
         Assert.assertEquals("AWT parent canvas received non consumed keyboard events", newtCanvasAWTKA.getConsumedCount(), newtCanvasAWTKA.getCount());
+        System.err.println("FOCUS NEWT Canvas/GLWindow sync.2.2");
         AWTRobotUtil.assertMouseClick(robot, java.awt.event.InputEvent.BUTTON1_MASK, 1,
                                       glWindow1, glWindow1MA);
+        System.err.println("FOCUS NEWT Canvas/GLWindow sync.2.3");
         AWTRobotUtil.assertMouseClick(robot, java.awt.event.InputEvent.BUTTON1_MASK, 2,
                                       glWindow1, glWindow1MA);
+        System.err.println("FOCUS NEWT Canvas/GLWindow sync.2.4");
         if( !newtCanvasAWT.isAWTEventPassThrough() ) {
             Assert.assertEquals("AWT parent canvas received consumed keyboard events", 0, newtCanvasAWTKA.getConsumedCount());
             Assert.assertEquals("AWT parent canvas received mouse events", 0, newtCanvasAWTMA.getCount());
@@ -230,13 +236,13 @@ public class TestParentingFocus02SwingAWTRobot extends UITestCase {
 
         // Button Inner Focus
         Thread.sleep(100); // allow event sync
-        System.err.println("FOCUS AWT  Button request");
+        System.err.println("FOCUS AWT  Button request.3");
         EventCountAdapterUtil.reset(eventCountAdapters);
         AWTRobotUtil.assertRequestFocusAndWait(robot, buttonNorthInner, buttonNorthInner, buttonNorthInnerFA, glWindow1FA);
         Assert.assertEquals(false, glWindow1FA.focusGained());
         Assert.assertEquals(false, newtCanvasAWTFA.focusGained());
         Assert.assertEquals(false, buttonNorthOuterFA.focusGained());
-        System.err.println("FOCUS AWT  Button sync");
+        System.err.println("FOCUS AWT  Button sync.3");
         AWTRobotUtil.assertKeyType(robot, java.awt.event.KeyEvent.VK_A, 2, buttonNorthInner, buttonNorthInnerKA);
         AWTRobotUtil.assertMouseClick(robot, java.awt.event.InputEvent.BUTTON1_MASK, 1,
                                       buttonNorthInner, buttonNorthInnerMA);
@@ -245,7 +251,7 @@ public class TestParentingFocus02SwingAWTRobot extends UITestCase {
 
         // NEWT Focus
         Thread.sleep(100); // allow event sync
-        System.err.println("FOCUS NEWT Canvas/GLWindow request");
+        System.err.println("FOCUS NEWT Canvas/GLWindow request.4");
         EventCountAdapterUtil.reset(eventCountAdapters);
         AWTRobotUtil.assertRequestFocusAndWait(robot, newtCanvasAWT, newtCanvasAWT.getNEWTChild(), glWindow1FA, buttonNorthInnerFA);
         // Manually tested on Java7/[Linux,Windows] (where this assertion failed),
@@ -257,7 +263,7 @@ public class TestParentingFocus02SwingAWTRobot extends UITestCase {
         }
 
         Assert.assertEquals(false, buttonNorthOuterFA.focusGained());
-        System.err.println("FOCUS NEWT Canvas/GLWindow sync");
+        System.err.println("FOCUS NEWT Canvas/GLWindow sync.4");
         AWTRobotUtil.assertKeyType(robot, java.awt.event.KeyEvent.VK_A, 2, glWindow1, glWindow1KA);
         Assert.assertEquals("AWT parent canvas received non consumed keyboard events", newtCanvasAWTKA.getConsumedCount(), newtCanvasAWTKA.getCount());
         AWTRobotUtil.assertMouseClick(robot, java.awt.event.InputEvent.BUTTON1_MASK, 1,
@@ -273,6 +279,7 @@ public class TestParentingFocus02SwingAWTRobot extends UITestCase {
         Assert.assertEquals(false, animator1.isAnimating());
 
         SwingUtilities.invokeAndWait(new Runnable() {
+                @Override
                 public void run() {
                     jFrame1.setVisible(false);
                     jPanel1.remove(container1);

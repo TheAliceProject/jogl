@@ -68,7 +68,7 @@ public class GearsObjectES1 extends GearsObject {
             if( validateBuffers ) {
                 final int bufferTarget = array.getVBOTarget();
                 final int bufferName = array.getVBOName();
-                final long bufferSize = array.getSizeInBytes();
+                final long bufferSize = array.getByteCount();
                 final int hasBufferName = gl.getBoundBuffer(bufferTarget);
                 final GLBufferStorage hasStorage = gl.getBufferStorage(hasBufferName);
                 final boolean ok = bufferName == hasBufferName &&
@@ -79,7 +79,7 @@ public class GearsObjectES1 extends GearsObject {
                                           ", Name[exp "+bufferName+", has "+hasBufferName+", Size exp "+bufferSize+", Storage "+hasStorage+"]");
                 }
             }
-            gl.glDrawArrays(mode, 0, array.getElementCount());
+            gl.glDrawArrays(mode, 0, array.getElemCount());
             array.enableBuffer(gl, false);
         }
     }

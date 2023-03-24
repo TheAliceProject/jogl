@@ -32,6 +32,7 @@ import com.jogamp.newt.event.PinchToZoomGesture;
 import com.jogamp.newt.event.GestureHandler.GestureEvent;
 import com.jogamp.opengl.GLRendererQuirks;
 import com.jogamp.opengl.JoglVersion;
+import com.jogamp.opengl.demos.GearsObject;
 import com.jogamp.opengl.math.FloatUtil;
 import com.jogamp.opengl.math.Quaternion;
 import com.jogamp.opengl.math.VectorUtil;
@@ -55,8 +56,6 @@ import com.jogamp.opengl.GLAutoDrawable;
 import com.jogamp.opengl.GLUniformData;
 import com.jogamp.opengl.fixedfunc.GLMatrixFunc;
 
-import com.jogamp.opengl.demos.GearsObject;
-
 /**
  * GearsES2.java <BR>
  * @author Brian Paul (converted to Java by Ron Cemer and Sven Gothel) <P>
@@ -68,7 +67,7 @@ public class GearsES2 implements StereoGLEventListener, TileRendererBase.TileRen
     private PMVMatrix pmvMatrix = null;
     private GLUniformData pmvMatrixUniform = null;
     private GLUniformData colorU = null;
-    private float view_rotx = 20.0f, view_roty = 30.0f;
+    private volatile float view_rotx = 20.0f, view_roty = 30.0f;
     private boolean flipVerticalInGLOrientation = false;
     private final boolean customRendering = false;
 
@@ -149,6 +148,11 @@ public class GearsES2 implements StereoGLEventListener, TileRendererBase.TileRen
     public void setSyncObjects(final Object sync) {
         syncObjects = sync;
     }
+
+    public float getRotX() { return view_rotx; }
+    public float getRotY() { return view_roty; }
+    public void setRotX(final float v) { view_rotx = v; }
+    public void setRotY(final float v) { view_roty = v; }
 
     /**
      * @return gear1
@@ -565,7 +569,11 @@ public class GearsES2 implements StereoGLEventListener, TileRendererBase.TileRen
         return "GearsES2[obj "+sid()+" isInit "+isInit+", usesShared "+usesSharedGears+", 1 "+gear1+", 2 "+gear2+", 3 "+gear3+", sharedGears "+sharedGears+"]";
     }
 
+    public KeyListener getKeyListener() { return this.gearsKeys; }
+    public MouseListener getMouseListener() { return this.gearsMouse; }
+
     class GearsKeyAdapter extends KeyAdapter {
+        @Override
         public void keyPressed(final KeyEvent e) {
             final int kc = e.getKeyCode();
             if(KeyEvent.VK_LEFT == kc) {
@@ -610,6 +618,7 @@ public class GearsES2 implements StereoGLEventListener, TileRendererBase.TileRen
             }
         }
 
+        @Override
         public void mousePressed(final MouseEvent e) {
             if( e.getPointerCount()==1 ) {
                 prevMouseX = e.getX();
@@ -622,9 +631,11 @@ public class GearsES2 implements StereoGLEventListener, TileRendererBase.TileRen
             }
         }
 
+        @Override
         public void mouseReleased(final MouseEvent e) {
         }
 
+        @Override
         public void mouseMoved(final MouseEvent e) {
             if( e.isConfined() ) {
                 navigate(e);
@@ -636,6 +647,7 @@ public class GearsES2 implements StereoGLEventListener, TileRendererBase.TileRen
             }
         }
 
+        @Override
         public void mouseDragged(final MouseEvent e) {
             navigate(e);
         }

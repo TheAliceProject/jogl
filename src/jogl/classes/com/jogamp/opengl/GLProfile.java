@@ -1,6 +1,6 @@
 /*
+ * Copyright (c) 2010-2023 JogAmp Community. All rights reserved.
  * Copyright (c) 2003 Sun Microsystems, Inc. All Rights Reserved.
- * Copyright (c) 2010 JogAmp Community. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -40,7 +40,6 @@ package com.jogamp.opengl;
 import jogamp.opengl.Debug;
 import jogamp.opengl.GLDrawableFactoryImpl;
 import jogamp.opengl.GLDynamicLookupHelper;
-import jogamp.opengl.DesktopGLDynamicLookupHelper;
 
 import com.jogamp.common.ExceptionUtils;
 import com.jogamp.common.GlueGenVersion;
@@ -48,21 +47,19 @@ import com.jogamp.common.jvm.JNILibLoaderBase;
 import com.jogamp.common.os.Platform;
 import com.jogamp.common.util.PropertyAccess;
 import com.jogamp.common.util.ReflectionUtil;
+import com.jogamp.common.util.SecurityUtil;
 import com.jogamp.common.util.VersionUtil;
 import com.jogamp.common.util.cache.TempJarCache;
 import com.jogamp.common.util.locks.LockFactory;
 import com.jogamp.common.util.locks.RecursiveThreadGroupLock;
 import com.jogamp.gluegen.runtime.FunctionAddressResolver;
 import com.jogamp.nativewindow.NativeWindowVersion;
-import com.jogamp.opengl.GLRendererQuirks;
-import com.jogamp.opengl.JoglVersion;
 
 import com.jogamp.nativewindow.AbstractGraphicsDevice;
 import com.jogamp.nativewindow.NativeWindowFactory;
 import com.jogamp.opengl.fixedfunc.GLPointerFunc;
 
 import java.lang.reflect.Constructor;
-import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.util.HashMap;
 import java.util.List;
@@ -222,7 +219,7 @@ public class GLProfile {
 
                 // run the whole static initialization privileged to speed up,
                 // since this skips checking further access
-                AccessController.doPrivileged(new PrivilegedAction<Object>() {
+                SecurityUtil.doPrivileged(new PrivilegedAction<Object>() {
                     @Override
                     public Object run() {
                         Platform.initSingleton();
@@ -1343,8 +1340,10 @@ public class GLProfile {
     }
 
     /**
-     * General validation if type is a valid GL data type
-     * for the current profile
+     * General validation if type is a valid GL data type for the current profile.
+     * <p>
+     * Disclaimer: The validation might not satisfy updated OpenGL specifications.
+     * </p>
      */
     public boolean isValidDataType(final int type, final boolean throwException) {
         switch(type) {
@@ -1377,13 +1376,18 @@ public class GLProfile {
         return false;
     }
 
+    /**
+     * General validation if index, comps and type are valid for the current profile.
+     * <p>
+     * Disclaimer: The validation might not satisfy updated OpenGL specifications.
+     * </p>
+     */
     public boolean isValidArrayDataType(final int index, final int comps, final int type,
                                         final boolean isVertexAttribPointer, final boolean throwException) {
-        final String arrayName = getGLArrayName(index);
         if( isGLES1() ) {
             if(isVertexAttribPointer) {
                 if(throwException) {
-                    throw new GLException("Illegal array type for "+arrayName+" on profile GLES1: VertexAttribPointer");
+                    throw new GLException("Illegal array type for "+getGLArrayName(index)+" on profile GLES1: VertexAttribPointer");
                 }
                 return false;
             }
@@ -1398,7 +1402,7 @@ public class GLProfile {
                             break;
                         default:
                             if(throwException) {
-                                throw new GLException("Illegal data type for "+arrayName+" on profile GLES1: "+type);
+                                throw new GLException("Illegal data type for "+getGLArrayName(index)+" on profile GLES1: "+type);
                             }
                             return false;
                     }
@@ -1410,7 +1414,7 @@ public class GLProfile {
                             break;
                         default:
                             if(throwException) {
-                                throw new GLException("Illegal component number for "+arrayName+" on profile GLES1: "+comps);
+                                throw new GLException("Illegal component number for "+getGLArrayName(index)+" on profile GLES1: "+comps);
                             }
                             return false;
                     }
@@ -1424,7 +1428,7 @@ public class GLProfile {
                             break;
                         default:
                             if(throwException) {
-                                throw new GLException("Illegal data type for "+arrayName+" on profile GLES1: "+type);
+                                throw new GLException("Illegal data type for "+getGLArrayName(index)+" on profile GLES1: "+type);
                             }
                             return false;
                     }
@@ -1434,7 +1438,7 @@ public class GLProfile {
                             break;
                         default:
                             if(throwException) {
-                                throw new GLException("Illegal component number for "+arrayName+" on profile GLES1: "+comps);
+                                throw new GLException("Illegal component number for "+getGLArrayName(index)+" on profile GLES1: "+comps);
                             }
                             return false;
                     }
@@ -1447,7 +1451,7 @@ public class GLProfile {
                             break;
                         default:
                             if(throwException) {
-                                throw new GLException("Illegal data type for "+arrayName+" on profile GLES1: "+type);
+                                throw new GLException("Illegal data type for "+getGLArrayName(index)+" on profile GLES1: "+type);
                             }
                             return false;
                     }
@@ -1457,25 +1461,31 @@ public class GLProfile {
                             break;
                         default:
                             if(throwException) {
-                                throw new GLException("Illegal component number for "+arrayName+" on profile GLES1: "+comps);
+                                throw new GLException("Illegal component number for "+getGLArrayName(index)+" on profile GLES1: "+comps);
                             }
                             return false;
                     }
                     break;
             }
-        } else if( isGLES2() ) {
+        } else if( isGLES3() ) {
             // simply ignore !isVertexAttribPointer case, since it is simulated anyway ..
             switch(type) {
                 case GL.GL_UNSIGNED_BYTE:
                 case GL.GL_BYTE:
                 case GL.GL_UNSIGNED_SHORT:
                 case GL.GL_SHORT:
+                case com.jogamp.opengl.GL2ES2.GL_INT:
+                case GL.GL_UNSIGNED_INT:
+                case GL.GL_HALF_FLOAT:
                 case GL.GL_FLOAT:
                 case GL.GL_FIXED:
+                case GL3ES3.GL_INT_2_10_10_10_REV:
+                case com.jogamp.opengl.GL2ES2.GL_UNSIGNED_INT_2_10_10_10_REV:
+                case GL.GL_UNSIGNED_INT_10F_11F_11F_REV:
                     break;
                 default:
                     if(throwException) {
-                        throw new GLException("Illegal data type for "+arrayName+" on profile GLES2: "+type);
+                        throw new GLException("Illegal data type on profile GLES3: "+type);
                     }
                     return false;
             }
@@ -1489,7 +1499,37 @@ public class GLProfile {
                     break;
                 default:
                     if(throwException) {
-                        throw new GLException("Illegal component number for "+arrayName+" on profile GLES2: "+comps);
+                        throw new GLException("Illegal component number on profile GLES3: "+comps);
+                    }
+                    return false;
+            } */
+        } else if( isGLES2() ) {
+            // simply ignore !isVertexAttribPointer case, since it is simulated anyway ..
+            switch(type) {
+                case GL.GL_UNSIGNED_BYTE:
+                case GL.GL_BYTE:
+                case GL.GL_UNSIGNED_SHORT:
+                case GL.GL_SHORT:
+                case GL.GL_FLOAT:
+                case GL.GL_FIXED:
+                    break;
+                default:
+                    if(throwException) {
+                        throw new GLException("Illegal data type on profile GLES2: "+type);
+                    }
+                    return false;
+            }
+            /** unable to validate .. could be any valid type/component combination
+            switch(comps) {
+                case 0:
+                case 1:
+                case 2:
+                case 3:
+                case 4:
+                    break;
+                default:
+                    if(throwException) {
+                        throw new GLException("Illegal component number on profile GLES2: "+comps);
                     }
                     return false;
             } */
@@ -1500,14 +1540,19 @@ public class GLProfile {
                     case GL.GL_BYTE:
                     case GL.GL_UNSIGNED_SHORT:
                     case GL.GL_SHORT:
-                    case GL.GL_FLOAT:
                     case com.jogamp.opengl.GL2ES2.GL_INT:
                     case GL.GL_UNSIGNED_INT:
+                    case GL.GL_HALF_FLOAT:
+                    case GL.GL_FLOAT:
+                    case GL.GL_FIXED:
+                    case GL3ES3.GL_INT_2_10_10_10_REV:
+                    case com.jogamp.opengl.GL2ES2.GL_UNSIGNED_INT_2_10_10_10_REV:
                     case com.jogamp.opengl.GL2GL3.GL_DOUBLE:
+                    case GL.GL_UNSIGNED_INT_10F_11F_11F_REV:
                         break;
                     default:
                         if(throwException) {
-                            throw new GLException("Illegal data type for "+arrayName+" on profile GL2: "+type);
+                            throw new GLException("Illegal data type on profile GL2: "+type);
                         }
                         return false;
                 }
@@ -1520,7 +1565,7 @@ public class GLProfile {
                         break;
                     default:
                         if(throwException) {
-                            throw new GLException("Illegal component number for "+arrayName+" on profile GL2: "+comps);
+                            throw new GLException("Illegal component number on profile GL2: "+comps);
                         }
                         return false;
                 }
@@ -1535,7 +1580,7 @@ public class GLProfile {
                                 break;
                             default:
                                 if(throwException) {
-                                    throw new GLException("Illegal data type for "+arrayName+" on profile GL2: "+type);
+                                    throw new GLException("Illegal data type for "+getGLArrayName(index)+" on profile GL2: "+type);
                                 }
                                 return false;
                         }
@@ -1547,7 +1592,7 @@ public class GLProfile {
                                 break;
                             default:
                                 if(throwException) {
-                                    throw new GLException("Illegal component number for "+arrayName+" on profile GL2: "+comps);
+                                    throw new GLException("Illegal component number for "+getGLArrayName(index)+" on profile GL2: "+comps);
                                 }
                                 return false;
                         }
@@ -1562,7 +1607,7 @@ public class GLProfile {
                                 break;
                             default:
                                 if(throwException) {
-                                    throw new GLException("Illegal data type for "+arrayName+" on profile GL2: "+type);
+                                    throw new GLException("Illegal data type for "+getGLArrayName(index)+" on profile GL2: "+type);
                                 }
                                 return false;
                         }
@@ -1572,7 +1617,7 @@ public class GLProfile {
                                 break;
                             default:
                                 if(throwException) {
-                                    throw new GLException("Illegal component number for "+arrayName+" on profile GLES1: "+comps);
+                                    throw new GLException("Illegal component number for "+getGLArrayName(index)+" on profile GLES1: "+comps);
                                 }
                                 return false;
                         }
@@ -1590,7 +1635,7 @@ public class GLProfile {
                                 break;
                             default:
                                 if(throwException) {
-                                    throw new GLException("Illegal data type for "+arrayName+" on profile GL2: "+type);
+                                    throw new GLException("Illegal data type for "+getGLArrayName(index)+" on profile GL2: "+type);
                                 }
                                 return false;
                         }
@@ -1601,7 +1646,7 @@ public class GLProfile {
                                 break;
                             default:
                                 if(throwException) {
-                                    throw new GLException("Illegal component number for "+arrayName+" on profile GL2: "+comps);
+                                    throw new GLException("Illegal component number for "+getGLArrayName(index)+" on profile GL2: "+comps);
                                 }
                                 return false;
                         }
@@ -1615,7 +1660,7 @@ public class GLProfile {
                                 break;
                             default:
                                 if(throwException) {
-                                    throw new GLException("Illegal data type for "+arrayName+" on profile GL2: "+type);
+                                    throw new GLException("Illegal data type for "+getGLArrayName(index)+" on profile GL2: "+type);
                                 }
                                 return false;
                         }
@@ -1628,7 +1673,7 @@ public class GLProfile {
                                 break;
                             default:
                                 if(throwException) {
-                                    throw new GLException("Illegal component number for "+arrayName+" on profile GL2: "+comps);
+                                    throw new GLException("Illegal component number for "+getGLArrayName(index)+" on profile GL2: "+comps);
                                 }
                                 return false;
                         }
@@ -1932,11 +1977,19 @@ public class GLProfile {
             // Triggers eager initialization of share context in GLDrawableFactory for the device,
             // hence querying all available GLProfiles
             final Thread sharedResourceThread = desktopFactory.getSharedResourceThread();
+            final boolean initLockOwnerAdded;
             if(null != sharedResourceThread) {
-                initLock.addOwner(sharedResourceThread);
+                if( !initLock.isOriginalOwner(sharedResourceThread) ) {
+                    initLock.addOwner(sharedResourceThread);
+                    initLockOwnerAdded = true;
+                } else {
+                    initLockOwnerAdded = false;
+                }
+            } else {
+                initLockOwnerAdded = false;
             }
             final boolean desktopSharedCtxAvail = desktopFactory.createSharedResource(device);
-            if(null != sharedResourceThread) {
+            if( initLockOwnerAdded ) {
                 initLock.removeOwner(sharedResourceThread);
             }
             if( desktopSharedCtxAvail ) {
@@ -1962,11 +2015,19 @@ public class GLProfile {
             // Triggers eager initialization of share context in GLDrawableFactory for the device,
             // hence querying all available GLProfiles
             final Thread sharedResourceThread = mobileFactory.getSharedResourceThread();
+            final boolean initLockOwnerAdded;
             if(null != sharedResourceThread) {
-                initLock.addOwner(sharedResourceThread);
+                if( !initLock.isOriginalOwner(sharedResourceThread) ) {
+                    initLock.addOwner(sharedResourceThread);
+                    initLockOwnerAdded = true;
+                } else {
+                    initLockOwnerAdded = false;
+                }
+            } else {
+                initLockOwnerAdded = false;
             }
             final boolean eglSharedCtxAvail = mobileFactory.createSharedResource(device);
-            if(null != sharedResourceThread) {
+            if( initLockOwnerAdded ) {
                 initLock.removeOwner(sharedResourceThread);
             }
             if( eglSharedCtxAvail ) {
@@ -2293,7 +2354,17 @@ public class GLProfile {
         } else if(GL3 == profile && hasAnyGL234Impl && ( desktopCtxUndef || GLContext.isGL3Available(device, isHardwareRasterizer))) {
             return desktopCtxUndef ? GL3 : GLContext.getAvailableGLProfileName(device, 3, GLContext.CTX_PROFILE_CORE);
         } else if(GL2 == profile && hasAnyGL234Impl && ( desktopCtxUndef || GLContext.isGL2Available(device, isHardwareRasterizer))) {
-            return desktopCtxUndef ? GL2 : GLContext.getAvailableGLProfileName(device, 2, GLContext.CTX_PROFILE_COMPAT);
+            // return desktopCtxUndef ? GL2 : GLContext.getAvailableGLProfileName(device, 2, GLContext.CTX_PROFILE_COMPAT);
+            if( desktopCtxUndef ) {
+                return GL2;
+            } else {
+                final String gl2_impl = GLContext.getAvailableGLProfileName(device, 2, GLContext.CTX_PROFILE_COMPAT);
+                if( GL3bc == gl2_impl && !GLContext.isGL3bcAvailable(device, isHardwareRasterizer) ) {
+                    return GL2;
+                } else {
+                    return gl2_impl;
+                }
+            }
         } else if(GLES3 == profile && hasGLES3Impl && ( esCtxUndef || GLContext.isGLES3Available(device, isHardwareRasterizer))) {
             return esCtxUndef ? GLES3 : GLContext.getAvailableGLProfileName(device, 3, GLContext.CTX_PROFILE_ES);
         } else if(GLES2 == profile && hasGLES3Impl && ( esCtxUndef || GLContext.isGLES2Available(device, isHardwareRasterizer))) {

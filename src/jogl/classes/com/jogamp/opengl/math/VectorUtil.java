@@ -29,6 +29,8 @@ package com.jogamp.opengl.math;
 
 import java.util.ArrayList;
 
+import com.jogamp.graph.geom.plane.Winding;
+
 public final class VectorUtil {
 
     public static final float[] VEC3_ONE = { 1f, 1f, 1f };
@@ -37,16 +39,6 @@ public final class VectorUtil {
     public static final float[] VEC3_UNIT_Y_NEG = { 0f, -1f, 0f };
     public static final float[] VEC3_UNIT_Z = { 0f, 0f, 1f };
     public static final float[] VEC3_UNIT_Z_NEG = { 0f, 0f, -1f };
-
-    public enum Winding {
-        CW(-1), CCW(1);
-
-        public final int dir;
-
-        Winding(final int dir) {
-            this.dir = dir;
-        }
-    }
 
     /**
      * Copies a vector of length 2
@@ -886,35 +878,46 @@ public final class VectorUtil {
         return false;
     }
 
-    /** Check if points are in ccw order
+    /**
+     * Check if points are in ccw order
      * @param a first vertex
      * @param b second vertex
      * @param c third vertex
      * @return true if the points a,b,c are in a ccw order
      */
-    public static boolean ccw(final Vert2fImmutable a, final Vert2fImmutable b, final Vert2fImmutable c){
+    public static boolean isCCW(final Vert2fImmutable a, final Vert2fImmutable b, final Vert2fImmutable c){
         return triAreaVec2(a,b,c) > 0;
     }
 
-    /** Compute the winding of given points
+    /**
+     * Compute the winding of the 3 given points
+     * <p>
+     * Consider using {@link #getWinding(ArrayList)} using the {@link #area(ArrayList)} function over all points
+     * on complex shapes for a reliable result!
+     * </p>
      * @param a first vertex
      * @param b second vertex
      * @param c third vertex
-     * @return Winding
+     * @return {@link Winding#CCW} or {@link Winding#CW}
+     * @see #getWinding(ArrayList)
      */
     public static Winding getWinding(final Vert2fImmutable a, final Vert2fImmutable b, final Vert2fImmutable c) {
         return triAreaVec2(a,b,c) > 0 ? Winding.CCW : Winding.CW ;
     }
 
-    /** Computes the area of a list of vertices to check if ccw
+    /**
+     * Computes the area of a list of vertices.
+     * <p>
+     * This method is utilized e.g. to reliably compute the {@link Winding} of complex shapes.
+     * </p>
      * @param vertices
      * @return positive area if ccw else negative area value
+     * @see #getWinding(ArrayList)
      */
     public static float area(final ArrayList<? extends Vert2fImmutable> vertices) {
         final int n = vertices.size();
         float area = 0.0f;
-        for (int p = n - 1, q = 0; q < n; p = q++)
-        {
+        for (int p = n - 1, q = 0; q < n; p = q++) {
             final float[] pCoord = vertices.get(p).getCoord();
             final float[] qCoord = vertices.get(q).getCoord();
             area += pCoord[0] * qCoord[1] - qCoord[0] * pCoord[1];
@@ -922,9 +925,15 @@ public final class VectorUtil {
         return area;
     }
 
-    /** Compute the  general winding of the vertices
+    /**
+     * Compute the winding using the {@link #area(ArrayList)} function over all vertices for complex shapes.
+     * <p>
+     * Uses the {@link #area(ArrayList)} function over all points
+     * on complex shapes for a reliable result!
+     * </p>
      * @param vertices array of Vertices
-     * @return CCW or CW {@link Winding}
+     * @return {@link Winding#CCW} or {@link Winding#CW}
+     * @see #area(ArrayList)
      */
     public static Winding getWinding(final ArrayList<? extends Vert2fImmutable> vertices) {
         return area(vertices) >= 0 ? Winding.CCW : Winding.CW ;

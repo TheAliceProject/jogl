@@ -1,5 +1,5 @@
 /**
- * Copyright 2011 JogAmp Community. All rights reserved.
+ * Copyright 2011-2023 JogAmp Community. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification, are
  * permitted provided that the following conditions are met:
@@ -27,97 +27,74 @@
  */
 package jogamp.graph.font.typecast;
 
-import jogamp.graph.font.typecast.ot.OTFont;
-import jogamp.graph.font.typecast.ot.OTFontCollection;
-import jogamp.graph.font.typecast.ot.table.CmapFormat;
-import jogamp.graph.font.typecast.ot.table.CmapIndexEntry;
-import jogamp.graph.font.typecast.ot.table.CmapTable;
-import jogamp.graph.font.typecast.ot.table.HdmxTable;
-import jogamp.graph.font.typecast.ot.table.ID;
-import jogamp.graph.geom.plane.AffineTransform;
-
 import com.jogamp.common.util.IntObjectHashMap;
 import com.jogamp.graph.curve.OutlineShape;
 import com.jogamp.graph.font.Font;
 import com.jogamp.graph.font.FontFactory;
-import com.jogamp.graph.geom.SVertex;
 import com.jogamp.graph.geom.Vertex;
+import com.jogamp.graph.geom.Vertex.Factory;
+import com.jogamp.graph.geom.plane.AffineTransform;
 import com.jogamp.opengl.math.geom.AABBox;
+
+import jogamp.graph.font.typecast.ot.OTFontCollection;
+import jogamp.graph.font.typecast.ot.TTFont;
+import jogamp.graph.font.typecast.ot.table.CmapFormat;
+import jogamp.graph.font.typecast.ot.table.CmapTable;
+import jogamp.graph.font.typecast.ot.table.GlyfDescript;
+import jogamp.graph.font.typecast.ot.table.GlyfTable;
+import jogamp.graph.font.typecast.ot.table.HheaTable;
+import jogamp.graph.font.typecast.ot.table.HmtxTable;
+import jogamp.graph.font.typecast.ot.table.ID;
+import jogamp.graph.font.typecast.ot.table.KernSubtable;
+import jogamp.graph.font.typecast.ot.table.KernSubtableFormat0;
+import jogamp.graph.font.typecast.ot.table.KernTable;
+import jogamp.graph.font.typecast.ot.table.KerningPair;
+import jogamp.graph.font.typecast.ot.table.PostTable;
 
 class TypecastFont implements Font {
     static final boolean DEBUG = false;
-    private static final Vertex.Factory<SVertex> vertexFactory = SVertex.factory();
 
     // private final OTFontCollection fontset;
-    /* pp */ final OTFont font;
+    /* pp */ final TTFont font;
     private final CmapFormat cmapFormat;
     private final int cmapentries;
-    private final IntObjectHashMap char2Glyph;
+    private final IntObjectHashMap idToGlyph;
     private final TypecastHMetrics metrics;
-    private final float[] tmpV3 = new float[3];
     // FIXME: Add cache size to limit memory usage ??
+
+    private static final boolean forceAscii = false; // FIXME ??? (ASCII/Macintosh cmap format)
 
     public TypecastFont(final OTFontCollection fontset) {
         // this.fontset = fontset;
         this.font = fontset.getFont(0);
 
-        // FIXME: Generic attempt to find the best CmapTable,
-        // which is assumed to be the one with the most entries (stupid 'eh?)
         final CmapTable cmapTable = font.getCmapTable();
-        final CmapFormat[] _cmapFormatP = { null, null, null, null };
         int platform = -1;
-        int platformLength = -1;
         int encoding = -1;
-        for(int i=0; i<cmapTable.getNumTables(); i++) {
-            final CmapIndexEntry cmapIdxEntry = cmapTable.getCmapIndexEntry(i);
-            final int pidx = cmapIdxEntry.getPlatformId();
-            final CmapFormat cf = cmapIdxEntry.getFormat();
-            if(DEBUG) {
-                System.err.println("CmapFormat["+i+"]: platform " + pidx +
-                                   ", encoding "+cmapIdxEntry.getEncodingId() + ": "+cf);
-            }
-            if( _cmapFormatP[pidx] == null ||
-                _cmapFormatP[pidx].getLength() < cf.getLength() ) {
-                _cmapFormatP[pidx] = cf;
-                if( cf.getLength() > platformLength ) {
-                    platformLength = cf.getLength() ;
-                    platform = pidx;
-                    encoding = cmapIdxEntry.getEncodingId();
-                }
+
+        // Decide upon a cmap table to use for our character to glyph look-up
+        CmapFormat cmapFmt;
+        platform = ID.platformMicrosoft;
+        if (forceAscii) {
+            // We've been asked to use the ASCII/Macintosh cmap format
+            encoding = ID.encodingRoman;
+            cmapFmt = cmapTable.getCmapFormat(ID.platformMacintosh, ID.encodingRoman);
+        } else {
+            // The default behaviour is to use the Unicode cmap encoding
+            encoding = ID.encodingUnicode;
+            cmapFmt = cmapTable.getCmapFormat(ID.platformMicrosoft, ID.encodingUnicode);
+            if (cmapFmt == null) {
+                // This might be a symbol font
+                encoding = ID.encodingSymbol;
+                cmapFmt = cmapTable.getCmapFormat(ID.platformMicrosoft, ID.encodingSymbol);
             }
         }
-        if(0 <= platform) {
-            cmapFormat = _cmapFormatP[platform];
-            if(DEBUG) {
-                System.err.println("Selected CmapFormat: platform " + platform +
-                                   ", encoding "+encoding + ": "+cmapFormat);
-            }
-        } else {
-            CmapFormat _cmapFormat = null;
-            /*if(null == _cmapFormat) {
-                platform = ID.platformMacintosh;
-                encoding = ID.encodingASCII;
-                _cmapFormat = cmapTable.getCmapFormat(platform, encoding);
-            } */
-            if(null == _cmapFormat) {
-                // default unicode
-                platform = ID.platformMicrosoft;
-                encoding = ID.encodingUnicode;
-                _cmapFormat = cmapTable.getCmapFormat((short)platform, (short)encoding);
-            }
-            if(null == _cmapFormat) {
-                // maybe a symbol font ?
-                platform = ID.platformMicrosoft;
-                encoding = ID.encodingSymbol;
-                _cmapFormat = cmapTable.getCmapFormat((short)platform, (short)encoding);
-            }
-            if(null == _cmapFormat) {
-                throw new RuntimeException("Cannot find a suitable cmap table for font "+font);
-            }
-            cmapFormat = _cmapFormat;
-            if(DEBUG) {
-                System.err.println("Selected CmapFormat (2): platform " + platform + ", encoding "+encoding + ": "+cmapFormat);
-            }
+        if (cmapFmt == null) {
+            throw new RuntimeException("Cannot find a suitable cmap table");
+        }
+        cmapFormat = cmapFmt;
+        if(DEBUG) {
+            System.err.println("Selected CmapFormat: platform " + platform + ", encoding "+encoding + ": "+cmapFormat);
         }
 
         {
@@ -128,7 +105,11 @@ class TypecastFont implements Font {
             }
             cmapentries = _cmapentries;
         }
+        idToGlyph = new IntObjectHashMap(cmapentries + cmapentries/4);
+        metrics = new TypecastHMetrics(this);
+
         if(DEBUG) {
+            final int max_id = 36; // "A"
             System.err.println("font direction hint: "+font.getHeadTable().getFontDirectionHint());
             System.err.println("num glyphs: "+font.getNumGlyphs());
             System.err.println("num cmap entries: "+cmapentries);
@@ -138,38 +119,57 @@ class TypecastFont implements Font {
                 final CmapFormat.Range range = cmapFormat.getRange(i);
                 for (int j = range.getStartCode(); j <= range.getEndCode(); ++j) {
                     final int code = cmapFormat.mapCharCode(j);
-                    if(code < 15) {
+                    if(code <= max_id) {
                         System.err.println(" char: " + j + " ( " + (char)j +" ) -> " + code);
                     }
                 }
             }
+            final HmtxTable hmtx = font.getHmtxTable();
+            final HheaTable hhea = font.getHheaTable();
+            final GlyfTable glyfTable = font.getGlyfTable();
+            for(int i=0; i <= max_id; ++i) {
+                final jogamp.graph.font.typecast.ot.Glyph tc_g = font.getGlyph(i);
+                final Glyph g = getGlyph(i);
+                final GlyfDescript gd = glyfTable.getDescription(i);
+                System.err.println("Index "+i);
+                System.err.println("  hmtx aw "+hmtx.getAdvanceWidth(i)+", lsb "+hmtx.getLeftSideBearing(i));
+                System.err.println("  hhea aw-max "+hhea.getAdvanceWidthMax()+", x-max "+hhea.getXMaxExtent());
+                if( null != gd ) {
+                    System.err.println("  gdesc idx "+gd.getGlyphIndex()+", isComp "+gd.isComposite()+", contours "+gd.getContourCount()+", points "+gd.getPointCount());
+                } else {
+                    System.err.println("  gdesc null");
+                }
+                if( null != tc_g) {
+                    System.err.println("  tc_glyph "+tc_g);
+                } else {
+                    System.err.println("  tc_glyph null");
+                }
+                System.err.println("  glyph "+g);
+            }
+            System.err.println( fullString() );
         }
-        char2Glyph = new IntObjectHashMap(cmapentries + cmapentries/4);
-        metrics = new TypecastHMetrics(this);
     }
 
     @Override
-    public StringBuilder getName(final StringBuilder sb, final int nameIndex) {
-        return font.getName(nameIndex, sb);
-    }
-    @Override
     public String getName(final int nameIndex) {
-        return getName(null, nameIndex).toString();
+        return font.getName(nameIndex);
     }
     @Override
     public StringBuilder getAllNames(final StringBuilder sb, final String separator) {
         return font.getAllNames(sb, separator);
     }
     @Override
-    public StringBuilder getFullFamilyName(StringBuilder sb) {
-        sb = getName(sb, Font.NAME_FAMILY).append("-");
-        getName(sb, Font.NAME_SUBFAMILY);
-        return sb;
+    public String getFullFamilyName() {
+        return getName(Font.NAME_FAMILY) + "-" + getName(Font.NAME_SUBFAMILY);
     }
 
     @Override
-    public float getAdvanceWidth(final int glyphID, final float pixelSize) {
-        return font.getHmtxTable().getAdvanceWidth(glyphID) * metrics.getScale(pixelSize);
+    public float getAdvanceWidth(final int glyphID) {
+        return metrics.getScale( font.getHmtxTable().getAdvanceWidth(glyphID) );
+    }
+    @Override
+    public int getAdvanceWidthFU(final int glyphID) {
+        return font.getHmtxTable().getAdvanceWidth(glyphID);
     }
 
     @Override
@@ -178,148 +178,223 @@ class TypecastFont implements Font {
     }
 
     @Override
-    public Glyph getGlyph(final char symbol) {
-        TypecastGlyph result = (TypecastGlyph) char2Glyph.get(symbol);
+    public int getGlyphID(final char symbol) {
+        final int glyphID = cmapFormat.mapCharCode(symbol);
+        if( 0 < glyphID ) {
+            return glyphID;
+        }
+        return Glyph.ID_UNKNOWN;
+    }
+
+    /** pp **/ PostTable getPostTable() {
+        return font.getPostTable();
+    }
+
+    @Override
+    public Glyph getGlyph(final int glyph_id) {
+        TypecastGlyph result = (TypecastGlyph) idToGlyph.get(glyph_id);
         if (null == result) {
-            // final short code = (short) char2Code.get(symbol);
-            short code = (short) cmapFormat.mapCharCode(symbol);
-            if(0 == code && 0 != symbol) {
-                // reserved special glyph IDs by convention
-                switch(symbol) {
-                    case ' ':  code = Glyph.ID_SPACE; break;
-                    case '\n': code = Glyph.ID_CR; break;
-                    default:   code = Glyph.ID_UNKNOWN;
+            final jogamp.graph.font.typecast.ot.Glyph glyph = font.getGlyph(glyph_id);
+            final PostTable post = font.getPostTable();
+            final String glyph_name = null != post ? post.getGlyphName(glyph_id) : "";
+
+            final int glyph_advance;
+            final int glyph_leftsidebearings;
+            final AABBox glyph_bbox;
+            final OutlineShape shape;
+            final boolean isWhiteSpace;
+            if( null != glyph ) {
+                glyph_advance = glyph.getAdvanceWidth();
+                glyph_leftsidebearings = glyph.getLeftSideBearing();
+                glyph_bbox = glyph.getBBox();
+                shape = TypecastRenderer.buildShape(metrics.getUnitsPerEM(), glyph, OutlineShape.getDefaultVertexFactory());
+                isWhiteSpace = false;
+            } else {
+                final int glyph_height = metrics.getAscentFU() - metrics.getDescentFU();
+                glyph_advance = getAdvanceWidthFU(glyph_id);
+                glyph_leftsidebearings = 0;
+                glyph_bbox = new AABBox(0f,0f,0f, glyph_advance, glyph_height, 0f);
+                shape = TypecastRenderer.buildEmptyShape(metrics.getUnitsPerEM(), glyph_bbox, OutlineShape.getDefaultVertexFactory());
+                isWhiteSpace = true;
+            }
+            KernSubtable kernSub = null;
+            {
+                final KernTable kern = font.getKernTable();
+                if (kern != null ) {
+                    kernSub = kern.getSubtable0();
                 }
             }
-
-            jogamp.graph.font.typecast.ot.OTGlyph glyph = font.getGlyph(code);
-            if(null == glyph) {
-                glyph = font.getGlyph(Glyph.ID_UNKNOWN);
-            }
-            if(null == glyph) {
-                throw new RuntimeException("Could not retrieve glyph for symbol: <"+symbol+"> "+(int)symbol+" -> glyph id "+code);
-            }
-            final OutlineShape shape = TypecastRenderer.buildShape(symbol, glyph, vertexFactory);
-            result = new TypecastGlyph(this, symbol, code, glyph.getBBox(), glyph.getAdvanceWidth(), shape);
+            result = new TypecastGlyph(this, glyph_id, glyph_name, glyph_bbox, glyph_advance, glyph_leftsidebearings, kernSub, shape, isWhiteSpace);
             if(DEBUG) {
-                System.err.println("New glyph: " + (int)symbol + " ( " + symbol +" ) -> " + code + ", contours " + glyph.getPointCount() + ": " + shape);
+                System.err.println("New glyph: " + glyph_id + "/'"+glyph_name+"', shape " + (null != shape));
+                System.err.println("  tc_glyph "+glyph);
+                System.err.println("     glyph "+result);
             }
-            glyph.clearPointData();
+            if( null != glyph ) {
+                glyph.clearPointData();
+            }
 
-            final HdmxTable hdmx = font.getHdmxTable();
-            if (null!= result && null != hdmx) {
-                /*if(DEBUG) {
-                    System.err.println("hdmx "+hdmx);
-                }*/
-                for (int i=0; i<hdmx.getNumberOfRecords(); i++)
-                {
-                    final HdmxTable.DeviceRecord dr = hdmx.getRecord(i);
-                    result.addAdvance(dr.getWidth(code), dr.getPixelSize());
-                    /* if(DEBUG) {
-                        System.err.println("hdmx advance : pixelsize = "+dr.getWidth(code)+" : "+ dr.getPixelSize());
-                    } */
-                }
-            }
-            char2Glyph.put(symbol, result);
+            idToGlyph.put(glyph_id, result);
         }
         return result;
     }
 
     @Override
-    public final float getPixelSize(final float fontSize /* points per inch */, final float resolution) {
-        return fontSize * resolution / ( 72f /* points per inch */ );
+    public float getLineHeight() {
+        return metrics.getScale( getLineHeightFU() );
     }
 
     @Override
-    public float getLineHeight(final float pixelSize) {
+    public int getLineHeightFU() {
         final Metrics metrics = getMetrics();
-        final float lineGap = metrics.getLineGap(pixelSize) ; // negative value!
-        final float ascent = metrics.getAscent(pixelSize) ; // negative value!
-        final float descent = metrics.getDescent(pixelSize) ; // positive value!
-        final float advanceY = lineGap - descent + ascent;  // negative value!
-        return -advanceY;
+        return metrics.getAscentFU() - metrics.getDescentFU() + metrics.getLineGapFU();
     }
 
     @Override
-    public float getMetricWidth(final CharSequence string, final float pixelSize) {
-        float width = 0;
-        final int len = string.length();
-        for (int i=0; i< len; i++) {
-            final char character = string.charAt(i);
-            if (character == '\n') {
-                width = 0;
-            } else {
-                final Glyph glyph = getGlyph(character);
-                width += glyph.getAdvance(pixelSize, false);
-            }
-        }
-        return (int)(width + 0.5f);
+    public AABBox getMetricBounds(final CharSequence string) {
+        return getMetricBoundsFU(string).scale2(1.0f/metrics.getUnitsPerEM(), new float[3]);
     }
 
     @Override
-    public float getMetricHeight(final CharSequence string, final float pixelSize, final AABBox tmp) {
-        int height = 0;
-
-        for (int i=0; i<string.length(); i++) {
-            final char character = string.charAt(i);
-            if (character != ' ') {
-                final Glyph glyph = getGlyph(character);
-                final AABBox bbox = glyph.getBBox(tmp, pixelSize, tmpV3);
-                height = (int)Math.ceil(Math.max(bbox.getHeight(), height));
-            }
-        }
-        return height;
-    }
-
-    @Override
-    public AABBox getMetricBounds(final CharSequence string, final float pixelSize) {
-        if (string == null) {
+    public AABBox getMetricBoundsFU(final CharSequence string) {
+        if (null == string || 0 == string.length() ) {
             return new AABBox();
         }
+        final AABBox res = new AABBox();
         final int charCount = string.length();
-        final float lineHeight = getLineHeight(pixelSize);
-        float totalHeight = 0;
-        float totalWidth = 0;
-        float curLineWidth = 0;
+
+        final int lineHeight = getLineHeightFU();
+
+        int y = 0;
+        int advanceTotal = 0;
+
         for (int i=0; i<charCount; i++) {
             final char character = string.charAt(i);
             if (character == '\n') {
-                totalWidth = Math.max(curLineWidth, totalWidth);
-                curLineWidth = 0;
-                totalHeight += lineHeight;
-                continue;
+                advanceTotal = 0;
+                y -= lineHeight;
+            } else {
+                advanceTotal += getAdvanceWidthFU( getGlyphID( character ) );
             }
-            final Glyph glyph = getGlyph(character);
-            curLineWidth += glyph.getAdvance(pixelSize, true);
+            res.resize(advanceTotal, y, 0f);
         }
-        if (curLineWidth > 0) {
-            totalHeight += lineHeight;
-            totalWidth = Math.max(curLineWidth, totalWidth);
+        if( 0 < advanceTotal ) {
+            // add one line for current non '\n' terminated
+            y -= lineHeight;
+            res.resize(advanceTotal, y, 0f);
         }
-        return new AABBox(0, 0, 0, totalWidth, totalHeight,0);
+        return res;
+    }
+
+    @Override
+    public AABBox getGlyphBounds(final CharSequence string) {
+        return getGlyphBounds(string, new AffineTransform(), new AffineTransform());
     }
     @Override
-    public AABBox getPointsBounds(final AffineTransform transform, final CharSequence string, final float pixelSize,
-                                  final AffineTransform temp1, final AffineTransform temp2) {
-        if (string == null) {
+    public AABBox getGlyphBounds(final CharSequence string, final AffineTransform tmp1, final AffineTransform tmp2) {
+        return getGlyphBoundsFU(string, tmp1, tmp2).scale2(1.0f/metrics.getUnitsPerEM(), new float[3]);
+    }
+
+    @Override
+    public AABBox getGlyphBoundsFU(final CharSequence string) {
+        return getGlyphBoundsFU(string, new AffineTransform(), new AffineTransform());
+    }
+    @Override
+    public AABBox getGlyphBoundsFU(final CharSequence string, final AffineTransform temp1, final AffineTransform temp2) {
+        if (null == string || 0 == string.length() ) {
             return new AABBox();
         }
-        final int charCount = string.length();
-        final float lineHeight = getLineHeight(pixelSize);
-        final float scale = getMetrics().getScale(pixelSize);
-        final AABBox tbox = new AABBox();
         final AABBox res = new AABBox();
+        final int charCount = string.length();
 
-        float y = 0;
-        float advanceTotal = 0;
+        final int lineHeight = getLineHeightFU();
+
+        int y = 0;
+        int advanceTotal = 0;
+        Font.Glyph left_glyph = null;
+        final AABBox temp_box = new AABBox();
 
         for(int i=0; i< charCount; i++) {
             final char character = string.charAt(i);
             if( '\n' == character ) {
                 y -= lineHeight;
                 advanceTotal = 0;
-            } else if (character == ' ') {
-                advanceTotal += getAdvanceWidth(Glyph.ID_SPACE, pixelSize);
+                left_glyph = null;
+            } else {
+                // reset transform
+                temp1.setToIdentity();
+                final int glyph_id = getGlyphID(character);
+                final Font.Glyph glyph = getGlyph(glyph_id);
+                final OutlineShape glyphShape = glyph.getShape();
+                if( null == glyphShape ) { // also covers 'space' and all non-contour symbols
+                    advanceTotal += glyph.getAdvanceFU();
+                    left_glyph = null; // break kerning
+                    continue;
+                } else if( glyph.isWhiteSpace() ) { // covers 'space' and all non-contour symbols
+                    advanceTotal += glyph.getAdvance();
+                    left_glyph = null; // break kerning
+                    continue;
+                }
+                if( null != left_glyph ) {
+                    advanceTotal += left_glyph.getKerningFU(glyph_id);
+                }
+                temp1.translate(advanceTotal, y, temp2);
+                res.resize(temp1.transform(glyph.getBBoxFU(), temp_box));
+
+                advanceTotal += glyph.getAdvanceFU();
+                left_glyph = glyph;
+            }
+        }
+        return res;
+    }
+
+    @Override
+    public AABBox getGlyphShapeBounds(final CharSequence string) {
+        return getGlyphShapeBounds(null, string);
+    }
+    @Override
+    public AABBox getGlyphShapeBounds(final AffineTransform transform, final CharSequence string) {
+        if (null == string || 0 == string.length() ) {
+            return new AABBox();
+        }
+        final Font.GlyphVisitor visitor = new Font.GlyphVisitor() {
+            @Override
+            public final void visit(final Font.Glyph shape, final AffineTransform t) {
+                // nop
+            } };
+        return processString(visitor, transform, string);
+    }
+
+    @Override
+    public AABBox processString(final Font.GlyphVisitor visitor, final AffineTransform transform,
+                                final CharSequence string) {
+        return processString(visitor, transform, string, new AffineTransform(), new AffineTransform());
+    }
+
+    @Override
+    public AABBox processString(final Font.GlyphVisitor visitor, final AffineTransform transform,
+                                final CharSequence string,
+                                final AffineTransform temp1, final AffineTransform temp2) {
+        if (null == string || 0 == string.length() ) {
+            return new AABBox();
+        }
+        final AABBox res = new AABBox();
+        final int charCount = string.length();
+
+        // region.setFlipped(true);
+        final float lineHeight = getLineHeight();
+
+        float y = 0;
+        float advanceTotal = 0;
+        Font.Glyph left_glyph = null;
+        final AABBox temp_box = new AABBox();
+
+        for(int i=0; i< charCount; i++) {
+            final char character = string.charAt(i);
+            if( '\n' == character ) {
+                y -= lineHeight;
+                advanceTotal = 0;
+                left_glyph = null;
             } else {
                 // reset transform
                 if( null != transform ) {
@@ -327,21 +402,47 @@ class TypecastFont implements Font {
                 } else {
                     temp1.setToIdentity();
                 }
-                temp1.translate(advanceTotal, y, temp2);
-                temp1.scale(scale, scale, temp2);
-                tbox.reset();
+                final int glyph_id = getGlyphID(character);
 
-                final Font.Glyph glyph = getGlyph(character);
-                res.resize(temp1.transform(glyph.getBBox(), tbox));
-
+                final Font.Glyph glyph = getGlyph(glyph_id);
                 final OutlineShape glyphShape = glyph.getShape();
-                if( null == glyphShape ) {
+
+                if( null == glyphShape ) { // also covers 'space' and all non-contour symbols
+                    advanceTotal += glyph.getAdvance();
+                    left_glyph = null; // break kerning
                     continue;
+                } else if( glyph.isWhiteSpace() ) { // covers 'space' and all non-contour symbols
+                    left_glyph = null; // break kerning
                 }
-                advanceTotal += glyph.getAdvance(pixelSize, true);
+                if( null != left_glyph ) {
+                    advanceTotal += left_glyph.getKerning(glyph_id);
+                }
+                temp1.translate(advanceTotal, y, temp2);
+                res.resize(temp1.transform(glyphShape.getBounds(), temp_box));
+                visitor.visit(glyph, temp1);
+                advanceTotal += glyph.getAdvance();
+                left_glyph = glyph;
             }
         }
         return res;
+    }
+
+    @Override
+    public void processString(final Font.GlyphVisitor2 visitor, final CharSequence string) {
+        if (null == string || 0 == string.length() ) {
+            return;
+        }
+        final int charCount = string.length();
+
+        for(int i=0; i< charCount; i++) {
+            final char character = string.charAt(i);
+            if( '\n' != character ) {
+                final Glyph glyph = getGlyph(getGlyphID(character));
+                if( null != glyph.getShape() ) { // also covers 'space' and all non-contour symbols
+                    visitor.visit(glyph);
+                }
+            }
+        }
     }
 
     @Override
@@ -355,7 +456,73 @@ class TypecastFont implements Font {
     }
 
     @Override
+    public final int hashCode() {
+        return font.getName(Font.NAME_UNIQUNAME).hashCode();
+    }
+
+    @Override
+    public final boolean equals(final Object o) {
+        if( this == o ) { return true; }
+        if( o instanceof TypecastFont ) {
+            return ((TypecastFont)o).font.getName(Font.NAME_UNIQUNAME).equals(font.getName(Font.NAME_UNIQUNAME));
+        }
+        return false;
+    }
+
+    @Override
     public String toString() {
-        return getFullFamilyName(null).toString();
+        return getFullFamilyName();
+    }
+
+    @SuppressWarnings("unused")
+    @Override
+    public String fullString() {
+        final StringBuilder sb = new StringBuilder();
+        sb.append(toString()).append("[ ").append(font.toString());
+        sb.append("\n").append(font.getHeadTable());
+        sb.append("\n\n").append(font.getHheaTable());
+        if( null != font.getVheaTable() ) {
+            sb.append("\n\n").append(font.getVheaTable());
+        }
+        if( false && null != font.getKernTable() ) { // too long
+            final PostTable post = font.getPostTable();
+            final KernTable kern = font.getKernTable();
+            sb.append("\n\n").append(kern);
+            final KernSubtableFormat0 ks0 = kern.getSubtable0();
+            if( null != ks0 ) {
+                final int sz = ks0.getKerningPairCount();
+                for(int i=0; i<sz; ++i) {
+                    final KerningPair kp = ks0.getKerningPair(i);
+                    final int left = kp.getLeft();
+                    final int right = kp.getRight();
+                    final String leftS;
+                    final String rightS;
+                    if( null == post ) {
+                        leftS = String.valueOf(left);
+                        rightS = String.valueOf(left);
+                    } else {
+                        leftS = post.getGlyphName(left)+"/"+String.valueOf(left);
+                        rightS = post.getGlyphName(right)+"/"+String.valueOf(right);
+                    }
+                    sb.append("\n      kp[").append(i).append("]: ").append(leftS).append(" -> ").append(rightS).append(" = ").append(kp.getValue());
+                }
+            }
+        }
+
+        sb.append("\n\n").append(font.getCmapTable());
+        /* if( null != font.getHdmxTable() ) {
+            sb.append("\n").append(font.getHdmxTable()); // too too long
+        } */
+        // glyf
+        // sb.append("\n").append(font.getHmtxTable()); // too long
+        /* if( null != font.getLocaTable() ) {
+            sb.append("\n").append(font.getLocaTable()); // too long
+        } */
+        sb.append("\n").append(font.getMaxpTable());
+        // sb.append("\n\n").append(font.getNameTable()); // no toString()
+        sb.append("\n\n").append(font.getOS2Table());
+        // sb.append("\n\n").append(font.getPostTable()); // too long
+        sb.append("\n]");
+        return sb.toString();
     }
 }

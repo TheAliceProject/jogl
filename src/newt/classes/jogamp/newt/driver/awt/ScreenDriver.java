@@ -105,14 +105,20 @@ public class ScreenDriver extends ScreenImpl {
         }
         final MonitorMode currentMode = getModeProps(cache, awtGD.getDisplayMode());
 
+        final int crt_id = 0;
         final int[] props = new int[MonitorModeProps.MIN_MONITOR_DEVICE_PROPERTIES - 1 - MonitorModeProps.NUM_MONITOR_MODE_PROPERTIES];
         int i = 0;
         props[i++] = props.length;
-        props[i++] = 0; // crt_idx
+        props[i++] = crt_id;
         props[i++] = 0; // is-clone
         props[i++] = 1; // is-primary
-        props[i++] = ScreenImpl.default_sm_widthmm; // FIXME
-        props[i++] = ScreenImpl.default_sm_heightmm; // FIXME
+        if( null != usrMonitorMMSize ) {
+            props[i++] = usrMonitorMMSize.getWidth();
+            props[i++] = usrMonitorMMSize.getHeight();
+        } else {
+            props[i++] = ScreenImpl.default_sm_widthmm; // FIXME
+            props[i++] = ScreenImpl.default_sm_heightmm; // FIXME
+        }
         props[i++] = 0; // rotated viewport x pixel-units
         props[i++] = 0; // rotated viewport y pixel-units
         props[i++] = currentMode.getRotatedWidth(); // rotated viewport width pixel-units
@@ -121,7 +127,7 @@ public class ScreenDriver extends ScreenImpl {
         props[i++] = 0; // rotated viewport y window-units
         props[i++] = currentMode.getRotatedWidth(); // rotated viewport width window-units
         props[i++] = currentMode.getRotatedHeight(); // rotated viewport height window-units
-        MonitorModeProps.streamInMonitorDevice(cache, this, currentMode, null, cache.monitorModes, props, 0, null);
+        MonitorModeProps.streamInMonitorDevice(cache, this, crt_id, null, currentMode, null, false, cache.monitorModes, props, 0, null);
     }
 
     @Override

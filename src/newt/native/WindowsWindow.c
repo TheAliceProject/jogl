@@ -761,7 +761,7 @@ static void UpdateInsets(JNIEnv *env, WindowUserData *wud, HWND hwnd) {
         (int) ( wud->insets.left + wud->insets.right ), (int) (wud->insets.top + wud->insets.bottom), wud->isInCreation);
     if( !wud->isInCreation ) {
         (*env)->CallVoidMethod(env, window, insetsChangedID, 
-                               (int)wud->insets.left, (int)wud->insets.right, (int)wud->insets.top, (int)wud->insets.bottom);
+                               JNI_FALSE, (int)wud->insets.left, (int)wud->insets.right, (int)wud->insets.top, (int)wud->insets.bottom);
     }
 }
 
@@ -809,7 +809,7 @@ static void WmSize(JNIEnv *env, WindowUserData * wud, HWND wnd, UINT type)
             jboolean v = wud->isMaximized ? JNI_TRUE : JNI_FALSE;
             (*env)->CallVoidMethod(env, window, maximizedChangedID, v, v);
         }
-        (*env)->CallVoidMethod(env, window, sizeChangedID, JNI_FALSE, wud->width, wud->height, JNI_FALSE);
+        (*env)->CallBooleanMethod(env, window, sizeChangedID, JNI_FALSE, JNI_FALSE, wud->width, wud->height, JNI_FALSE);
     }
 }
 
@@ -1071,7 +1071,7 @@ static LRESULT CALLBACK wndProc(HWND wnd, UINT message, WPARAM wParam, LPARAM lP
             wud->ypos = (int)GET_Y_LPARAM(lParam);
             DBG_PRINT("*** WindowsWindow: WM_MOVE window %p, %d/%d, at-init %d\n", wnd, wud->xpos, wud->ypos, wud->isInCreation);
             if( !wud->isInCreation ) {
-                (*env)->CallVoidMethod(env, window, positionChangedID, JNI_FALSE, (jint)wud->xpos, (jint)wud->ypos);
+                (*env)->CallBooleanMethod(env, window, positionChangedID, JNI_FALSE, JNI_FALSE, (jint)wud->xpos, (jint)wud->ypos);
             }
             useDefWindowProc = 1;
             break;
@@ -1767,15 +1767,15 @@ static LPCTSTR NewtScreen_getAdapterName(DISPLAY_DEVICE * device, int adapter_id
     return device->DeviceName;
 }
 
-static LPCTSTR NewtScreen_getMonitorName(LPCTSTR adapterName, DISPLAY_DEVICE * device, int monitor_idx, BOOL onlyActive) {
+static LPCTSTR NewtScreen_getMonitorName0(LPCTSTR adapterName, DISPLAY_DEVICE * device, int monitor_idx, BOOL onlyActive) {
     if( 0 > monitor_idx ) {
-        DBG_PRINT("*** WindowsWindow: getMonitorName(monitor_idx %d < 0)\n", monitor_idx);
+        DBG_PRINT("*** WindowsWindow: getMonitorName0(monitor_idx %d < 0)\n", monitor_idx);
         return NULL;
     }
     memset(device, 0, sizeof(DISPLAY_DEVICE)); 
     device->cb = sizeof(DISPLAY_DEVICE);
     if( FALSE == EnumDisplayDevices(adapterName, monitor_idx, device, EDD_GET_DEVICE_INTERFACE_NAME) ) {
-        DBG_PRINT("*** WindowsWindow: getMonitorName.EnumDisplayDevices(monitor_idx %d).adapter -> FALSE\n", monitor_idx);
+        DBG_PRINT("*** WindowsWindow: getMonitorName0.EnumDisplayDevices(monitor_idx %d).adapter -> FALSE\n", monitor_idx);
         return NULL;
     }
     if( onlyActive ) {
@@ -1789,6 +1789,24 @@ static LPCTSTR NewtScreen_getMonitorName(LPCTSTR adapterName, DISPLAY_DEVICE * d
     }
 
     return device->DeviceName;
+}
+
+static LPCTSTR NewtScreen_getMonitorName1(HMONITOR hmon, MONITORINFOEXA * info) {
+    if( 0 == hmon ) {
+        DBG_PRINT("*** WindowsWindow: getMonitorName1(hmon %p < 0)\n", (void*)hmon);
+        return NULL;
+    }
+    memset(info, 0, sizeof(MONITORINFOEXA)); 
+    info->cbSize = sizeof(MONITORINFOEXA);
+    if( FALSE == GetMonitorInfo(hmon, (LPMONITORINFO)info) ) {
+        DBG_PRINT("*** WindowsWindow: getMonitorName1.GetMonitorInfo(hmon %p) -> FALSE\n", (void*)hmon);
+        return NULL;
+    }
+    if( 0 == _tcslen(info->szDevice) ) {
+        return NULL;
+    }
+
+    return info->szDevice;
 }
 
 static int NewtScreen_getFirstActiveNonCloneMonitor(LPCTSTR adapterName, DISPLAY_DEVICE * device) {
@@ -1822,7 +1840,7 @@ JNIEXPORT void JNICALL Java_jogamp_newt_driver_windows_ScreenDriver_dumpMonitorI
         STD_PRINT("           deviceString <%s> \n", aDevice.DeviceString);
         STD_PRINT("           deviceID     <%s> \n", aDevice.DeviceID);
         j=0;
-        while(NULL != (dName = NewtScreen_getMonitorName(aName, &dDevice, j, FALSE))) {
+        while(NULL != (dName = NewtScreen_getMonitorName0(aName, &dDevice, j, FALSE))) {
             STD_PRINT("*** [%02d:%02d]: deviceName <%s> flags 0x%X active %d, mirror %d\n", 
                 i, j, dDevice.DeviceName, dDevice.StateFlags, 
                 0 != ( dDevice.StateFlags & DISPLAY_DEVICE_ACTIVE ),
@@ -1873,15 +1891,37 @@ JNIEXPORT jstring JNICALL Java_jogamp_newt_driver_windows_ScreenDriver_getMonito
     LPCTSTR monitorName;
 #ifdef UNICODE
     LPCTSTR adapterName = NewtCommon_GetNullTerminatedStringChars(env, jAdapterName);
-    monitorName = NewtScreen_getMonitorName(adapterName, &device, monitor_idx, onlyActive);
-    DBG_PRINT("*** WindowsWindow: getMonitorName(%s, monitor_idx %d) -> %s\n", adapterName, monitor_idx, (NULL==monitorName?"nil":monitorName));
+    monitorName = NewtScreen_getMonitorName0(adapterName, &device, monitor_idx, onlyActive);
+    DBG_PRINT("*** WindowsWindow: getMonitorName0(%s, monitor_idx %d) -> %s\n", adapterName, monitor_idx, (NULL==monitorName?"nil":monitorName));
     free((void*) adapterName);
 #else
     LPCTSTR adapterName = (*env)->GetStringUTFChars(env, jAdapterName, NULL);
-    monitorName = NewtScreen_getMonitorName(adapterName, &device, monitor_idx, onlyActive);
-    DBG_PRINT("*** WindowsWindow: getMonitorName(%s, monitor_idx %d) -> %s\n", adapterName, monitor_idx, (NULL==monitorName?"nil":monitorName));
+    monitorName = NewtScreen_getMonitorName0(adapterName, &device, monitor_idx, onlyActive);
+    DBG_PRINT("*** WindowsWindow: getMonitorName0(%s, monitor_idx %d) -> %s\n", adapterName, monitor_idx, (NULL==monitorName?"nil":monitorName));
     (*env)->ReleaseStringUTFChars(env, jAdapterName, adapterName);
 #endif
+    if(NULL == monitorName) {
+        return NULL;
+    }
+#ifdef UNICODE
+    return (*env)->NewString(env, monitorName, wcslen(monitorName));
+#else
+    return (*env)->NewStringUTF(env, monitorName);
+#endif
+}
+
+/*
+ * Class:     jogamp_newt_driver_windows_ScreenDriver
+ * Method:    getMonitorName1
+ * Signature: (J)Ljava/lang/String;
+ */
+JNIEXPORT jstring JNICALL Java_jogamp_newt_driver_windows_ScreenDriver_getMonitorName1
+  (JNIEnv *env, jobject obj, jlong jhmon)
+{
+    HMONITOR hmon = (HMONITOR) (intptr_t) jhmon;
+    MONITORINFOEXA info;
+    LPCTSTR monitorName = NewtScreen_getMonitorName1(hmon, &info);
+    DBG_PRINT("*** WindowsWindow: getMonitorName1(hmon %p) -> %s\n", (void*)hmon, (NULL==monitorName?"nil":monitorName));
     if(NULL == monitorName) {
         return NULL;
     }
@@ -1987,7 +2027,7 @@ JNIEXPORT jintArray JNICALL Java_jogamp_newt_driver_windows_ScreenDriver_getMoni
     DBG_PRINT("*** WindowsWindow: adapter[name %s, idx %d], monitor[idx %d, id %d], EDID-avail %d\n", 
         adapterName, adapter_idx, monitor_idx, monitor_id, NewtEDID_avail);
 
-    monitorName = NewtScreen_getMonitorName(adapterName, &monitorDevice, monitor_idx, TRUE);
+    monitorName = NewtScreen_getMonitorName0(adapterName, &monitorDevice, monitor_idx, TRUE);
     if( NULL == monitorName ) {
         DBG_PRINT("ERROR WindowsWindow: monitor[idx %d]: NULL\n", monitor_idx);
         return (*env)->NewIntArray(env, 0);
@@ -2122,13 +2162,13 @@ JNIEXPORT jboolean JNICALL Java_jogamp_newt_driver_windows_WindowDriver_initIDs0
 {
     NewtCommon_init(env);
 
-    insetsChangedID = (*env)->GetMethodID(env, clazz, "insetsChanged", "(IIII)V");
-    sizeChangedID = (*env)->GetMethodID(env, clazz, "sizeChanged", "(ZIIZ)V");
+    insetsChangedID = (*env)->GetMethodID(env, clazz, "insetsChanged", "(ZIIII)V");
+    sizeChangedID = (*env)->GetMethodID(env, clazz, "sizeChanged", "(ZZIIZ)Z");
     maximizedChangedID = (*env)->GetMethodID(env, clazz, "maximizedChanged", "(ZZ)V");
-    positionChangedID = (*env)->GetMethodID(env, clazz, "positionChanged", "(ZII)V");
+    positionChangedID = (*env)->GetMethodID(env, clazz, "positionChanged", "(ZZII)Z");
     focusChangedID = (*env)->GetMethodID(env, clazz, "focusChanged", "(ZZ)V");
     visibleChangedID = (*env)->GetMethodID(env, clazz, "visibleChanged", "(Z)V");
-    sizePosInsetsFocusVisibleChangedID = (*env)->GetMethodID(env, clazz, "sizePosInsetsFocusVisibleChanged", "(ZIIIIIIIIIIZ)V");
+    sizePosInsetsFocusVisibleChangedID = (*env)->GetMethodID(env, clazz, "sizePosInsetsFocusVisibleChanged", "(ZZIIIIIIIIIIZ)V");
     windowDestroyNotifyID = (*env)->GetMethodID(env, clazz, "windowDestroyNotify", "(Z)Z");
     windowRepaintID = (*env)->GetMethodID(env, clazz, "windowRepaint", "(ZIIII)V");
     sendMouseEventID = (*env)->GetMethodID(env, clazz, "sendMouseEvent", "(SIIISF)V");
@@ -2410,7 +2450,7 @@ JNIEXPORT void JNICALL Java_jogamp_newt_driver_windows_WindowDriver_InitWindow0
     if( wud->isMaximized ) {
         (*env)->CallVoidMethod(env, wud->jinstance, maximizedChangedID, JNI_TRUE, JNI_TRUE);
     }
-    (*env)->CallVoidMethod(env, wud->jinstance, sizePosInsetsFocusVisibleChangedID, JNI_FALSE,
+    (*env)->CallVoidMethod(env, wud->jinstance, sizePosInsetsFocusVisibleChangedID, JNI_FALSE, JNI_FALSE,
                            (jint)wud->xpos, (jint)wud->ypos,
                            (jint)wud->width, (jint)wud->height,
                            (jint)wud->insets.left, (jint)wud->insets.right, (jint)wud->insets.top, (jint)wud->insets.bottom,
@@ -2422,21 +2462,6 @@ JNIEXPORT void JNICALL Java_jogamp_newt_driver_windows_WindowDriver_InitWindow0
     if( wud->supportsMTouch ) {
         WinTouch_RegisterTouchWindow(hwnd, 0);
     }
-}
-
-/*
- * Class:     jogamp_newt_driver_windows_WindowDriver
- * Method:    MonitorFromWindow
- * Signature: (J)J
- */
-JNIEXPORT jlong JNICALL Java_jogamp_newt_driver_windows_WindowDriver_MonitorFromWindow0
-  (JNIEnv *env, jobject obj, jlong window)
-{
-    #if (_WIN32_WINNT >= 0x0500 || _WIN32_WINDOWS >= 0x0410 || WINVER >= 0x0500) && !defined(_WIN32_WCE)
-        return (jlong) (intptr_t) MonitorFromWindow((HWND) (intptr_t) window, MONITOR_DEFAULTTOPRIMARY);
-    #else
-        return 0;
-    #endif
 }
 
 /*

@@ -1908,11 +1908,11 @@ public final class FloatUtil {
       final int a0 = aOffset + a.position();
       if(rowMajorOrder) {
           for(int c=0; c<columns; c++) {
-              sb.append( String.format((Locale)null, f+" ", a.get( a0 + row*columns + c ) ) );
+              sb.append( String.format((Locale)null, f+", ", a.get( a0 + row*columns + c ) ) );
           }
       } else {
           for(int r=0; r<columns; r++) {
-              sb.append( String.format((Locale)null, f+" ", a.get( a0 + row + r*rows ) ) );
+              sb.append( String.format((Locale)null, f+", ", a.get( a0 + row + r*rows ) ) );
           }
       }
       return sb;
@@ -1936,11 +1936,11 @@ public final class FloatUtil {
       }
       if(rowMajorOrder) {
           for(int c=0; c<columns; c++) {
-              sb.append( String.format((Locale)null, f+" ", a[ aOffset + row*columns + c ] ) );
+              sb.append( String.format((Locale)null, f+", ", a[ aOffset + row*columns + c ] ) );
           }
       } else {
           for(int r=0; r<columns; r++) {
-              sb.append( String.format((Locale)null, f+" ", a[ aOffset + row + r*rows ] ) );
+              sb.append( String.format((Locale)null, f+", ", a[ aOffset + row + r*rows ] ) );
           }
       }
       return sb;
@@ -1963,11 +1963,15 @@ public final class FloatUtil {
           sb = new StringBuilder();
       }
       final String prefix = ( null == rowPrefix ) ? "" : rowPrefix;
+      sb.append(prefix).append("{ ");
       for(int i=0; i<rows; i++) {
-          sb.append(prefix).append("[ ");
+          if( 0 < i ) {
+              sb.append(prefix).append("  ");
+          }
           matrixRowToString(sb, f, a, aOffset, rows, columns, rowMajorOrder, i);
-          sb.append("]").append(Platform.getNewline());
+          sb.append(Platform.getNewline());
       }
+      sb.append(prefix).append("}").append(Platform.getNewline());
       return sb;
   }
 
@@ -1988,11 +1992,15 @@ public final class FloatUtil {
           sb = new StringBuilder();
       }
       final String prefix = ( null == rowPrefix ) ? "" : rowPrefix;
+      sb.append(prefix).append("{ ");
       for(int i=0; i<rows; i++) {
-          sb.append(prefix).append("[ ");
+          if( 0 < i ) {
+              sb.append(prefix).append("  ");
+          }
           matrixRowToString(sb, f, a, aOffset, rows, columns, rowMajorOrder, i);
-          sb.append("]").append(Platform.getNewline());
+          sb.append(Platform.getNewline());
       }
+      sb.append(prefix).append("}").append(Platform.getNewline());
       return sb;
   }
 
@@ -2120,6 +2128,16 @@ public final class FloatUtil {
 
   /** The value PI^2. */
   public final static float SQUARED_PI = PI * PI;
+
+  /** Converts arc-degree to radians */
+  public static float adegToRad(final float arc_degree) {
+      return arc_degree * PI / 180.0f;
+  }
+
+  /** Converts radians to arc-degree */
+  public static float radToADeg(final float rad) {
+      return rad * 180.0f / PI;
+  }
 
   /**
    * Epsilon for floating point {@value}, as once computed via {@link #getMachineEpsilon()} on an AMD-64 CPU.
@@ -2257,6 +2275,14 @@ public final class FloatUtil {
       return Math.abs(a) < epsilon;
   }
 
+  /**
+   * Return true if value is zero, i.e. it's absolute value < <code>epsilon</code>.
+   * @see #EPSILON
+   */
+  public static boolean isZero(final float a) {
+      return Math.abs(a) < FloatUtil.EPSILON;
+  }
+
   public static float abs(final float a) { return java.lang.Math.abs(a);  }
 
   public static float pow(final float a, final float b) { return (float) java.lang.Math.pow(a, b);  }
@@ -2314,10 +2340,10 @@ public final class FloatUtil {
 
   /**
    * Returns orthogonal distance
-   * (1f/zNear-1f/orthoDist)/(1f/zNear-1f/zFar);
+   * (1f/zNear-1f/orthoZ) / (1f/zNear-1f/zFar);
    */
   public static float getOrthoWinZ(final float orthoZ, final float zNear, final float zFar) {
-      return (1f/zNear-1f/orthoZ)/(1f/zNear-1f/zFar);
+      return (1f/zNear-1f/orthoZ) / (1f/zNear-1f/zFar);
   }
 
 }

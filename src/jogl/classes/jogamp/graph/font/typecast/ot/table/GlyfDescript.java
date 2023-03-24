@@ -54,33 +54,33 @@ import java.io.DataInput;
 import java.io.IOException;
 
 /**
- * @version $Id: GlyfDescript.java,v 1.3 2007-01-24 09:47:48 davidsch Exp $
- * @author <a href="mailto:davidsch@dev.java.net">David Schweinsberg</a>
+ * @author <a href="mailto:david.schweinsberg@gmail.com">David Schweinsberg</a>
  */
 public abstract class GlyfDescript extends Program implements GlyphDescription {
 
     // flags
     public static final byte onCurve = 0x01;
-    public static final byte xShortVector = 0x02;
-    public static final byte yShortVector = 0x04;
-    public static final byte repeat = 0x08;
-    public static final byte xDual = 0x10;
-    public static final byte yDual = 0x20;
+    static final byte xShortVector = 0x02;
+    static final byte yShortVector = 0x04;
+    static final byte repeat = 0x08;
+    static final byte xDual = 0x10;
+    static final byte yDual = 0x20;
 
-    protected GlyfTable _parentTable;
-    private int _glyphIndex;
+    final GlyfTable _parentTable;
+    private final int _glyphIndex;
     private final int _numberOfContours;
     private final short _xMin;
     private final short _yMin;
     private final short _xMax;
     private final short _yMax;
 
-    protected GlyfDescript(
+    GlyfDescript(
             final GlyfTable parentTable,
             final int glyphIndex,
             final short numberOfContours,
             final DataInput di) throws IOException {
         _parentTable = parentTable;
+        _glyphIndex = glyphIndex;
         _numberOfContours = numberOfContours;
         _xMin = di.readShort();
         _yMin = di.readShort();
@@ -88,7 +88,7 @@ public abstract class GlyfDescript extends Program implements GlyphDescription {
         _yMax = di.readShort();
     }
 
-    public int getNumberOfContours() {
+    int getNumberOfContours() {
         return _numberOfContours;
     }
 
@@ -119,12 +119,10 @@ public abstract class GlyfDescript extends Program implements GlyphDescription {
 
     @Override
     public String toString() {
-        return new StringBuilder()
-            .append("          numberOfContours: ").append(_numberOfContours)
-            .append("\n          xMin:             ").append(_xMin)
-            .append("\n          yMin:             ").append(_yMin)
-            .append("\n          xMax:             ").append(_xMax)
-            .append("\n          yMax:             ").append(_yMax)
-            .toString();
+        return "          numberOfContours: " + _numberOfContours +
+                "\n          xMin:             " + _xMin +
+                "\n          yMin:             " + _yMin +
+                "\n          xMax:             " + _xMax +
+                "\n          yMax:             " + _yMax;
     }
 }

@@ -59,18 +59,17 @@ import java.io.IOException;
  * The naming table allows multilingual strings to be associated with the
  * OpenType font file.  These strings can represent copyright notices, font
  * names, family names, style names, and so on.
- * @version $Id: NameTable.java,v 1.2 2004-12-09 23:47:23 davidsch Exp $
- * @author <a href="mailto:davidsch@dev.java.net">David Schweinsberg</a>
+ * @author <a href="mailto:david.schweinsberg@gmail.com">David Schweinsberg</a>
  */
 public class NameTable implements Table {
-    private final DirectoryEntry _de;
+
+    @SuppressWarnings("unused")
     private final short _formatSelector;
     private final short _numberOfNameRecords;
     private final short _stringStorageOffset;
     private final NameRecord[] _records;
 
-    protected NameTable(final DirectoryEntry de, final DataInput di) throws IOException {
-        _de = (DirectoryEntry) de.clone();
+    public NameTable(final DataInput di, final int length) throws IOException {
         _formatSelector = di.readShort();
         _numberOfNameRecords = di.readShort();
         _stringStorageOffset = di.readShort();
@@ -84,7 +83,7 @@ public class NameTable implements Table {
 
         // Load the string data into a buffer so the records can copy out the
         // bits they are interested in
-        final byte[] buffer = new byte[_de.getLength() - _stringStorageOffset];
+        final byte[] buffer = new byte[length - _stringStorageOffset];
         di.readFully(buffer);
 
         // Now let the records get their hands on them
@@ -106,44 +105,23 @@ public class NameTable implements Table {
         return null;
     }
 
-    public StringBuilder getRecordsRecordString(final StringBuilder sb, final int i) {
+    public String getRecordsRecordString(final int i) {
         if(_numberOfNameRecords > i) {
-            _records[i].getRecordString(sb);
+            return _records[i].getRecordString();
         } else {
-            sb.append(Table.notAvailable);
+            return "";
         }
-        return sb;
     }
 
-    public StringBuilder getNamedRecordString(final StringBuilder sb, final short nameId) {
+    /** Return a named record string */
+    public String getRecordString(final short nameId) {
         // Search for the first instance of this name ID
-        boolean done = false;
-        for (int i = 0; !done && i < _numberOfNameRecords; i++) {
+        for (int i = 0; i < _numberOfNameRecords; i++) {
             if (_records[i].getNameId() == nameId) {
-                _records[i].getRecordString(sb);
-                done = true;
+                return _records[i].getRecordString();
             }
         }
-        if(!done) {
-            sb.append(Table.notAvailable);
-        }
-        return sb;
-    }
-
-    @Override
-    public int getType() {
-        return name;
-    }
-
-    /**
-     * Get a directory entry for this table.  This uniquely identifies the
-     * table in collections where there may be more than one instance of a
-     * particular table.
-     * @return A directory entry
-     */
-    @Override
-    public DirectoryEntry getDirectoryEntry() {
-        return _de;
+        return "";
     }
 
 }

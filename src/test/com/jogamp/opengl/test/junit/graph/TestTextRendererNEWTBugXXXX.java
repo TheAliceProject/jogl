@@ -1,5 +1,5 @@
 /**
- * Copyright 2012 JogAmp Community. All rights reserved.
+ * Copyright 2012-2023 JogAmp Community. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification, are
  * permitted provided that the following conditions are met:
@@ -49,7 +49,6 @@ import com.jogamp.graph.curve.opengl.RenderState;
 import com.jogamp.graph.curve.opengl.RegionRenderer;
 import com.jogamp.graph.curve.opengl.TextRegionUtil;
 import com.jogamp.graph.font.Font;
-import com.jogamp.graph.geom.SVertex;
 import com.jogamp.opengl.math.geom.AABBox;
 import com.jogamp.opengl.test.junit.util.NEWTGLContext;
 import com.jogamp.opengl.test.junit.util.UITestCase;
@@ -137,15 +136,14 @@ public class TestTextRendererNEWTBugXXXX extends UITestCase {
 
         System.err.println("Chosen: "+winctx.window.getChosenCapabilities());
 
-        final RenderState rs = RenderState.createRenderState(SVertex.factory());
-        final RegionRenderer renderer = RegionRenderer.create(rs, RegionRenderer.defaultBlendEnable, RegionRenderer.defaultBlendDisable);
-        rs.setHintMask(RenderState.BITHINT_GLOBAL_DEPTH_TEST_ENABLED);
+        final RegionRenderer renderer = RegionRenderer.create(RegionRenderer.defaultBlendEnable, RegionRenderer.defaultBlendDisable);
+        renderer.getRenderState().setHintMask(RenderState.BITHINT_GLOBAL_DEPTH_TEST_ENABLED);
         final TextRegionUtil textRenderUtil = new TextRegionUtil(renderModes);
 
         // init
         gl.glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
-        renderer.init(gl, 0);
-        rs.setColorStatic(0.1f, 0.1f, 0.1f, 1.0f);
+        renderer.init(gl);
+        renderer.getRenderState().setColorStatic(0.1f, 0.1f, 0.1f, 1.0f);
         screenshot = new GLReadBufferUtil(false, false);
 
         // reshape
@@ -159,7 +157,7 @@ public class TestTextRendererNEWTBugXXXX extends UITestCase {
         gl.glClear(GL.GL_COLOR_BUFFER_BIT | GL.GL_DEPTH_BUFFER_BIT);
         for(int i=0; i<fonts.length; i++) {
             final Font font = fonts[i];
-            renderString(drawable, gl, renderer, font, textRenderUtil, font.getFullFamilyName(null).toString()+": "+issues, 0,  0==i?0:-1, -1000, sampleCountIO);
+            renderString(drawable, gl, renderer, font, textRenderUtil, font.getFullFamilyName()+": "+issues, 0,  0==i?0:-1, -1000, sampleCountIO);
             if(!onlyIssues) {
                 renderString(drawable, gl, renderer, font, textRenderUtil, "012345678901234567890123456789", 0,  -1, -1000, sampleCountIO);
                 renderString(drawable, gl, renderer, font, textRenderUtil, "abcdefghijklmnopqrstuvwxyz", 0, -1, -1000, sampleCountIO);
@@ -188,20 +186,24 @@ public class TestTextRendererNEWTBugXXXX extends UITestCase {
     void renderString(final GLDrawable drawable, final GL2ES2 gl, final RegionRenderer renderer, final Font font, final TextRegionUtil textRenderUtil, final String text, final int column, int row, final int z0, final int[] sampleCount) {
         final int height = drawable.getSurfaceHeight();
 
-        int dx = 0;
-        int dy = height;
+        float dx = 0;
+        float dy = height;
         if(0>row) {
             row = lastRow + 1;
         }
-        final AABBox textBox = font.getMetricBounds(text, fontSize);
-        dx += font.getAdvanceWidth('X', fontSize) * column;
-        dy -= (int)textBox.getHeight() * ( row + 1 );
+        final AABBox textBox = font.getMetricBounds(text);
+        dx += fontSize * font.getAdvanceWidth('X') * column;
+        dy -= fontSize * textBox.getHeight() * ( row + 1 );
 
         final PMVMatrix pmv = renderer.getMatrix();
         pmv.glMatrixMode(GLMatrixFunc.GL_MODELVIEW);
         pmv.glLoadIdentity();
         pmv.glTranslatef(dx, dy, z0);
-        textRenderUtil.drawString3D(gl, renderer, font, fontSize, text, null, sampleCount);
+        {
+            final float sxy = fontSize / font.getMetrics().getUnitsPerEM();
+            pmv.glScalef(sxy, sxy, 1.0f);
+        }
+        textRenderUtil.drawString3D(gl, renderer, font, text, null, sampleCount);
 
         lastRow = row;
     }

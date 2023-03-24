@@ -71,8 +71,10 @@ import jogamp.opengl.GLDrawableImpl;
 import jogamp.opengl.GLDynamicLookupHelper;
 import jogamp.opengl.GLGraphicsConfigurationUtil;
 import jogamp.opengl.SharedResourceRunner;
+import jogamp.opengl.GLContextImpl.MacOSVersion;
 
 import com.jogamp.common.nio.Buffers;
+import com.jogamp.common.os.Platform;
 import com.jogamp.common.util.ReflectionUtil;
 import com.jogamp.nativewindow.GenericUpstreamSurfacelessHook;
 import com.jogamp.nativewindow.MutableGraphicsConfiguration;
@@ -257,7 +259,7 @@ public class MacOSXCGLDrawableFactory extends GLDrawableFactoryImpl {
                 throw new GLException("Couldn't get default GLProfile for device: "+device);
             }
             final GLCapabilitiesImmutable caps = new GLCapabilities(glp);
-            drawable = createOnscreenDrawableImpl(createDummySurfaceImpl(device, false, caps, caps, null, 64, 64));
+            drawable = createOnscreenDrawableImpl(createDummySurfaceImpl(device, device, false, caps, caps, null, 64, 64));
             drawable.setRealized(true);
 
             context = (MacOSXCGLContext) drawable.createContext(null);
@@ -393,44 +395,48 @@ public class MacOSXCGLDrawableFactory extends GLDrawableFactoryImpl {
   @Override
   public boolean canCreateGLPbuffer(final AbstractGraphicsDevice device, final GLProfile glp) {
     if( glp.isGL2() ) {
-        // OSX only supports pbuffer w/ compatible, non-core, context.
-        return true;
+        // OSX only supports pbuffer w/ compatible, non-core, context
+        // on MacMacOS < 12  (my setup) or <= 10.14.0 (Mojave) (FIXME)
+        return Platform.getOSVersionNumber().compareTo(MacOSVersion.Mojave) <= 0;
     } else {
         return false;
     }
   }
 
   @Override
-  protected ProxySurface createMutableSurfaceImpl(final AbstractGraphicsDevice deviceReq, final boolean createNewDevice,
-                                                  final GLCapabilitiesImmutable capsChosen, final GLCapabilitiesImmutable capsRequested,
-                                                  final GLCapabilitiesChooser chooser, final UpstreamSurfaceHook upstreamHook) {
+  protected ProxySurface createMutableSurfaceImpl(final AbstractGraphicsDevice deviceOrig, final AbstractGraphicsDevice deviceReq,
+                                                  final boolean createNewDevice, final GLCapabilitiesImmutable capsChosen,
+                                                  final GLCapabilitiesImmutable capsRequested, final GLCapabilitiesChooser chooser, final UpstreamSurfaceHook upstreamHook) {
     final MacOSXGraphicsDevice device;
+    final boolean owning;
     if( createNewDevice || !(deviceReq instanceof MacOSXGraphicsDevice) ) {
         device = new MacOSXGraphicsDevice(deviceReq.getUnitID());
+        owning = true;
     } else {
         device = (MacOSXGraphicsDevice)deviceReq;
+        owning = false;
     }
     final AbstractGraphicsScreen screen = new DefaultGraphicsScreen(device, 0);
     final MacOSXCGLGraphicsConfiguration config = MacOSXCGLGraphicsConfigurationFactory.chooseGraphicsConfigurationStatic(capsChosen, capsRequested, chooser, screen, true);
     if(null == config) {
         throw new GLException("Choosing GraphicsConfiguration failed w/ "+capsChosen+" on "+screen);
     }
-    return new WrappedSurface(config, 0, upstreamHook, createNewDevice);
+    return new WrappedSurface(config, 0, upstreamHook, owning);
   }
 
   @Override
-  public final ProxySurface createDummySurfaceImpl(final AbstractGraphicsDevice deviceReq, final boolean createNewDevice,
-                                                   GLCapabilitiesImmutable chosenCaps, final GLCapabilitiesImmutable requestedCaps, final GLCapabilitiesChooser chooser, final int width, final int height) {
+  public final ProxySurface createDummySurfaceImpl(final AbstractGraphicsDevice deviceOrig, final AbstractGraphicsDevice device,
+                                                   final boolean createNewDevice, GLCapabilitiesImmutable chosenCaps, final GLCapabilitiesImmutable requestedCaps, final GLCapabilitiesChooser chooser, final int width, final int height) {
     chosenCaps = GLGraphicsConfigurationUtil.fixOnscreenGLCapabilities(chosenCaps);
-    return createMutableSurfaceImpl(deviceReq, createNewDevice, chosenCaps, requestedCaps, chooser,
-                                    new OSXDummyUpstreamSurfaceHook(width, height));
+    return createMutableSurfaceImpl(deviceOrig, device, createNewDevice, chosenCaps, requestedCaps,
+                                    chooser, new OSXDummyUpstreamSurfaceHook(width, height));
   }
 
   @Override
-  public final ProxySurface createSurfacelessImpl(final AbstractGraphicsDevice deviceReq, final boolean createNewDevice,
-          GLCapabilitiesImmutable chosenCaps, final GLCapabilitiesImmutable requestedCaps, final GLCapabilitiesChooser chooser, final int width, final int height) {
+  public final ProxySurface createSurfacelessImpl(final AbstractGraphicsDevice deviceOrig, final AbstractGraphicsDevice device,
+          final boolean createNewDevice, GLCapabilitiesImmutable chosenCaps, final GLCapabilitiesImmutable requestedCaps, final GLCapabilitiesChooser chooser, final int width, final int height) {
     chosenCaps = GLGraphicsConfigurationUtil.fixOnscreenGLCapabilities(chosenCaps);
-    return createMutableSurfaceImpl(deviceReq, createNewDevice, chosenCaps, requestedCaps, chooser, new GenericUpstreamSurfacelessHook(width, height));
+    return createMutableSurfaceImpl(deviceOrig, device, createNewDevice, chosenCaps, requestedCaps, chooser, new GenericUpstreamSurfacelessHook(width, height));
   }
 
   @Override

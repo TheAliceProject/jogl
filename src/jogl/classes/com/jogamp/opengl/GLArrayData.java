@@ -1,5 +1,5 @@
 /**
- * Copyright 2010 JogAmp Community. All rights reserved.
+ * Copyright 2010-2023 JogAmp Community. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification, are
  * permitted provided that the following conditions are met:
@@ -159,32 +159,122 @@ public interface GLArrayData {
     /**
      * The number of components per element
      */
-    public int getComponentCount();
+    public int getCompsPerElem();
 
     /**
      * The component's GL data type, ie. GL_FLOAT
      */
-    public int getComponentType();
+    public int getCompType();
 
     /**
      * The component's size in bytes
      */
-    public int getComponentSizeInBytes();
+    public int getBytesPerComp();
 
     /**
-     * The current number of used elements.
+     * Returns true if data has been {@link com.jogamp.opengl.util.GLArrayDataEditable#seal(boolean) sealed} (flipped to read), otherwise false (writing mode).
+     *
+     * @see com.jogamp.opengl.util.GLArrayDataEditable#seal(boolean)
+     * @see com.jogamp.opengl.util.GLArrayDataEditable#seal(GL, boolean)
+     */
+    public boolean sealed();
+
+    /**
+     * Returns the element position (written elements) if not {@link #sealed()} or
+     * the element limit (available to read) after {@link #sealed()} (flip).
      * <p>
-     * On element consist out of {@link #getComponentCount()} components.
+     * On element consist out of {@link #getCompsPerElem()} components.
      * </p>
-     * In case the buffer's position is 0 (sealed, flipped), it's based on it's limit instead of it's position.
+     * @see #sealed()
+     * @see #getByteCount()
+     * @see #elemPosition()
+     * @see #remainingElems()
+     * @see #getElemCapacity()
      */
-    public int getElementCount();
+    public int getElemCount();
 
     /**
-     * The currently used size in bytes.<br>
-     * In case the buffer's position is 0 (sealed, flipped), it's based on it's limit instead of it's position.
+     * Returns the element position.
+     * <p>
+     * On element consist out of {@link #getCompsPerElem()} components.
+     * </p>
+     * @see #bytePosition()
+     * @see #getElemCount()
+     * @see #remainingElems()
+     * @see #getElemCapacity()
      */
-    public int getSizeInBytes();
+    public int elemPosition();
+
+    /**
+     * The current number of remaining elements.
+     * <p>
+     * On element consist out of {@link #getCompsPerElem()} components.
+     * </p>
+     * Returns the number of elements between the current position and the limit, i.e. remaining elements to write in this buffer.
+     * @see #remainingBytes()
+     * @see #getElemCount()
+     * @see #elemPosition()
+     * @see #getElemCapacity()
+     */
+    public int remainingElems();
+
+    /**
+     * Return the element capacity.
+     * <p>
+     * On element consist out of {@link #getCompsPerElem()} components.
+     * </p>
+     * @see #getByteCapacity()
+     * @see #getElemCount()
+     * @see #elemPosition()
+     * @see #remainingElems()
+     */
+    public int getElemCapacity();
+
+    /**
+     * Returns the byte position (written elements) if not {@link #sealed()} or
+     * the byte limit (available to read) after {@link #sealed()} (flip).
+     * @see #sealed()
+     * @see #getElemCount()
+     * @see #bytePosition()
+     * @see #remainingBytes()
+     * @see #getByteCapacity()
+     */
+    public int getByteCount();
+
+    /**
+     * Returns the bytes position.
+     * @see #elemPosition()
+     * @see #getByteCount()
+     * @see #remainingElems()
+     * @see #getElemCapacity()
+     */
+    public int bytePosition();
+
+    /**
+     * The current number of remaining bytes.
+     * <p>
+     * Returns the number of bytes between the current position and the limit, i.e. remaining bytes to write in this buffer.
+     * </p>
+     * @see #remainingElems()
+     * @see #getByteCount()
+     * @see #bytePosition()
+     * @see #getByteCapacity()
+     */
+    public int remainingBytes();
+
+    /**
+     * Return the capacity in bytes.
+     * @see #getElemCapacity()
+     * @see #getByteCount()
+     * @see #bytePosition()
+     * @see #remainingBytes()
+     */
+    public int getByteCapacity();
+
+    /** Returns a string with detailed buffer fill stats. */
+    public String fillStatsToString();
+    /** Returns a string with detailed buffer element stats, i.e. sealed, count, position, remaining, limit and capacity.  */
+    public String elemStatsToString();
 
     /**
      * True, if GL shall normalize fixed point data while converting

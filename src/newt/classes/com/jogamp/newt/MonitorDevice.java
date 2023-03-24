@@ -60,7 +60,9 @@ import com.jogamp.common.util.ArrayHashSet;
  */
 public abstract class MonitorDevice {
     protected final Screen screen; // backref
-    protected final int nativeId; // unique monitor device ID
+    protected final long nativeHandle; // unique monitor device long handle, implementation specific
+    protected final int nativeId; // unique monitor device integer Id, implementation specific
+    protected final String name; // optional monitor name, maybe an empty string
     protected final DimensionImmutable sizeMM; // in [mm]
     protected final MonitorMode originalMode;
     protected final ArrayHashSet<MonitorMode> supportedModes; // FIXME: May need to support mutable mode, i.e. adding modes on the fly!
@@ -72,9 +74,65 @@ public abstract class MonitorDevice {
     protected MonitorMode currentMode;
     protected boolean modeChanged;
 
+    public static enum Orientation {
+        clone(0),
+        right_of(1),
+        left_of(-1),
+        below(2),
+        above(-2);
+
+        public final int value;
+
+        private Orientation(final int v) {
+            value = v;
+        }
+    }
+
+    /**
+     * Returns the orientation of this monitor to the other
+     * @param other the other monitor
+     * @param move_diff int[2] to store the move delta for each axis from this-monitor to the other.
+     * @return Orientation of this-monitor to the other
+     */
+    public final Orientation getOrientationTo(final MonitorDevice other, final int move_diff[/*2*/]) {
+        Orientation orientation = Orientation.clone;
+        // Move from other -> this
+        if( null != other ) {
+            // Move from vp0 -> vp1
+            final RectangleImmutable vp0 = other.getViewport(); // pixel units
+            final RectangleImmutable vp1 = this.getViewport(); // pixel units
+            if( vp0.getY() == vp1.getY() || vp0.getY() + vp0.getHeight() - 1 == vp1.getY() + vp1.getHeight() - 1 ) {
+                // vp0.y == vp1.y, i.e. horizontal move
+                if( vp1.getX() > vp0.getX() + vp0.getWidth() - 1 ) {
+                    // vp1 right-of vp0
+                    move_diff[0] = vp1.getX() - ( vp0.getX() + vp0.getWidth() - 1 ); // > 0
+                    orientation = Orientation.right_of;
+                } else if( vp1.getX() + vp1.getWidth() - 1 < vp0.getX() ) {
+                    // vp1 left-of vp0
+                    move_diff[0] = ( vp1.getX() + vp1.getWidth() - 1 ) - vp0.getX(); // < 0
+                    orientation = Orientation.left_of;
+                } // else same .. i.e. clone
+            } else if( vp0.getX() == vp1.getX() || vp0.getX() + vp0.getWidth() - 1 == vp1.getX() + vp1.getWidth() - 1 ) {
+                // vp0.x == vp1.x, i.e. vertical move
+                if( vp1.getY() + vp0.getHeight() - 1 < vp0.getY() ) {
+                    // vp1 above vp0
+                    move_diff[1] = ( vp1.getY() + vp1.getHeight() - 1 ) - vp0.getY() ; // < 0
+                    orientation = Orientation.above;
+                } else if( vp1.getY() > vp0.getY() + vp0.getHeight() - 1 ) {
+                    // vp1 below vp0
+                    move_diff[1] = vp1.getY() - ( vp0.getY() + vp0.getHeight() - 1 ); // > 0
+                    orientation = Orientation.below;
+                }
+            }
+        }
+        return orientation;
+    }
+
     /**
      * @param screen associated {@link Screen}
-     * @param nativeId unique monitor device ID
+     * @param nativeHandle unique monitor device long handle, implementation specific
+     * @param nativeId unique monitor device integer Id, implementation specific
+     * @param name optional monitor name, maybe null
      * @param isClone flag
      * @param isPrimary flag
      * @param sizeMM size in millimeters
@@ -84,16 +142,22 @@ public abstract class MonitorDevice {
      * @param viewportWU viewport in window-units
      * @param supportedModes all supported {@link MonitorMode}s
      */
-    protected MonitorDevice(final Screen screen, final int nativeId,
-                            final boolean isClone, final boolean isPrimary,
-                            final DimensionImmutable sizeMM, final MonitorMode currentMode, final float[] pixelScale,
-                            final Rectangle viewportPU, final Rectangle viewportWU, final ArrayHashSet<MonitorMode> supportedModes) {
+    protected MonitorDevice(final Screen screen, final long nativeHandle, final int nativeId,
+                            final String name, final boolean isClone,
+                            final boolean isPrimary, final DimensionImmutable sizeMM, final MonitorMode currentMode,
+                            final float[] pixelScale, final Rectangle viewportPU, final Rectangle viewportWU, final ArrayHashSet<MonitorMode> supportedModes) {
         this.screen = screen;
+        this.nativeHandle = nativeHandle;
         this.nativeId = nativeId;
+        this.name = null != name ? name : "";
         this.sizeMM = sizeMM;
         this.originalMode = currentMode;
         this.supportedModes = supportedModes;
-        this.pixelScale = null != pixelScale ? pixelScale : new float[] { 1.0f, 1.0f };
+        if( null != pixelScale ) {
+            this.pixelScale = new float[] { pixelScale[0], pixelScale[1] };
+        } else {
+            this.pixelScale = new float[] { ScalableSurface.IDENTITY_PIXELSCALE, ScalableSurface.IDENTITY_PIXELSCALE };
+        }
         this.viewportPU = viewportPU;
         this.viewportWU = viewportWU;
 
@@ -137,8 +201,14 @@ public abstract class MonitorDevice {
         return nativeId;
     }
 
-    /** @return the immutable unique native Id of this monitor device. */
+    /** @return the immutable unique native long handle of this monitor device, implementation specific. */
+    public final long getHandle() { return nativeHandle; }
+
+    /** @return the immutable unique native integer Id of this monitor device, implementation specific. */
     public final int getId() { return nativeId; }
+
+    /** @return optional monitor name, maybe an empty string but never null. */
+    public final String getName() { return name; }
 
     /** @return {@code true} if this device represents a <i>clone</i>, otherwise return {@code false}. */
     public final boolean isClone() { return isClone; }
@@ -160,10 +230,12 @@ public abstract class MonitorDevice {
      * Returns the <i>pixels per millimeter</i> value according to the <i>current</i> {@link MonitorMode mode}'s
      * {@link SurfaceSize#getResolution() surface resolution}.
      * <p>
-     * To convert the result to <i>dpi</i>, i.e. dots-per-inch, multiply both components with <code>25.4f</code>.
+     * To convert the result to <i>dpi</i>, i.e. dots-per-inch, multiply both components with <code>25.4f</code>,
+     * see {@link #perMMToPerInch(float[])}.
      * </p>
      * @param ppmmStore float[2] storage for the ppmm result
      * @return the passed storage containing the ppmm for chaining
+     * @see #perMMToPerInch(float[])
      */
     public final float[] getPixelsPerMM(final float[] ppmmStore) {
         return getPixelsPerMM(getCurrentMode(), ppmmStore);
@@ -185,6 +257,17 @@ public abstract class MonitorDevice {
         ppmmStore[0] = (float)spix.getWidth() / (float)sdim.getWidth();
         ppmmStore[1] = (float)spix.getHeight() / (float)sdim.getHeight();
         return ppmmStore;
+    }
+
+    /**
+     * Converts [1/mm] to [1/inch] in place
+     * @param ppmm float[2] [1/mm] value
+     * @return return [1/inch] value
+     */
+    public static float[/*2*/] perMMToPerInch(final float[/*2*/] ppmm) {
+        ppmm[0] *= 25.4f;
+        ppmm[1] *= 25.4f;
+        return ppmm;
     }
 
     /**
@@ -345,7 +428,24 @@ public abstract class MonitorDevice {
         final StringBuilder sb = new StringBuilder();
         sb.append("Monitor[Id ").append(Display.toHexString(nativeId)).append(" [");
         {
+            if( !name.isEmpty() ) {
+                if( preComma ) {
+                    sb.append(", ");
+                }
+                sb.append("name ").append("'").append(name).append("'");
+                preComma = true;
+            }
+            if( nativeHandle != nativeId ) {
+                if( preComma ) {
+                    sb.append(", ");
+                }
+                sb.append("handle ").append(Display.toHexString(nativeHandle));
+                preComma = true;
+            }
             if( isClone() ) {
+                if( preComma ) {
+                    sb.append(", ");
+                }
                 sb.append("clone");
                 preComma = true;
             }
@@ -358,8 +458,8 @@ public abstract class MonitorDevice {
         }
         preComma = false;
         sb.append("], ").append(sizeMM).append(" mm, pixelScale [").append(pixelScale[0]).append(", ")
-        .append(pixelScale[1]).append("], viewport ").append(viewportPU).append(" [pixels], ").append(viewportWU)
-        .append(" [window], orig ").append(originalMode).append(", curr ")
+        .append(pixelScale[1]).append("], viewport[pixel ").append(viewportPU).append(", window ").append(viewportWU)
+        .append("], orig ").append(originalMode).append(", curr ")
         .append(currentMode).append(", modeChanged ").append(modeChanged).append(", modeCount ")
         .append(supportedModes.size()).append("]");
         return sb.toString();

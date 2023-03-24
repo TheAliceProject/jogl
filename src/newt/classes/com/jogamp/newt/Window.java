@@ -47,7 +47,6 @@ import com.jogamp.nativewindow.CapabilitiesImmutable;
 import com.jogamp.nativewindow.NativeWindow;
 import com.jogamp.nativewindow.ScalableSurface;
 import com.jogamp.nativewindow.WindowClosingProtocol;
-import com.jogamp.nativewindow.util.Rectangle;
 import com.jogamp.nativewindow.util.RectangleImmutable;
 import com.jogamp.nativewindow.util.SurfaceSize;
 
@@ -88,12 +87,12 @@ import com.jogamp.nativewindow.util.SurfaceSize;
  * The location must be resolvable via classpath, i.e. shall reference a location within the jar file.
  * Example (our default):
  * <pre>
- *   -Dnewt.window.icons="newt/data/jogamp-16x16.png,newt/data/jogamp-32x32.png"
- *   -Djnlp.newt.window.icons="newt/data/jogamp-16x16.png,newt/data/jogamp-32x32.png"
+ *   -Dnewt.window.icons="jogamp/newt/assets/jogamp-16x16.png,jogamp/newt/assets/jogamp-32x32.png"
+ *   -Djnlp.newt.window.icons="jogamp/newt/assets/jogamp-16x16.png,jogamp/newt/assets/jogamp-32x32.png"
  * </pre>
  * The property can also be set programmatically, which must happen before any NEWT classes are <i>touched</i>:
  * <pre>
- *   System.setProperty("newt.window.icons", "newt/data/jogamp-16x16.png, newt/data/jogamp-32x32.png");
+ *   System.setProperty("newt.window.icons", "jogamp/newt/assets/jogamp-16x16.png,jogamp/newt/assets/jogamp-32x32.png");
  * </pre>
  * To disable even Jogamp's own window icons in favor of system icons,
  * simply set a non-existing location, e.g.:
@@ -623,12 +622,6 @@ public interface Window extends NativeWindow, WindowClosingProtocol, ScalableSur
     //
     // Modes / States
     //
-
-    /**
-     * Returns a newly created {@link Rectangle} containing window origin, {@link #getX()} & {@link #getY()},
-     * and size, {@link #getWidth()} & {@link #getHeight()}, in window units.
-     */
-    Rectangle getBounds();
 
     /**
      * Returns the <i>pixels per millimeter</i> of this window's {@link NativeSurface}

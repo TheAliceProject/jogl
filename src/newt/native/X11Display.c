@@ -253,13 +253,13 @@ JNIEXPORT jboolean JNICALL Java_jogamp_newt_driver_x11_DisplayDriver_initIDs0
     sendRRScreenChangeNotifyID = (*env)->GetMethodID(env, clazz, "sendRRScreenChangeNotify", "(J)V");
     getCurrentThreadNameID = (*env)->GetStaticMethodID(env, X11NewtWindowClazz, "getCurrentThreadName", "()Ljava/lang/String;");
     dumpStackID = (*env)->GetStaticMethodID(env, X11NewtWindowClazz, "dumpStack", "()V");
-    insetsChangedID = (*env)->GetMethodID(env, X11NewtWindowClazz, "insetsChanged", "(IIII)V");
-    sizeChangedID = (*env)->GetMethodID(env, X11NewtWindowClazz, "sizeChanged", "(ZIIZ)V");
-    positionChangedID = (*env)->GetMethodID(env, X11NewtWindowClazz, "positionChanged", "(ZII)V");
+    insetsChangedID = (*env)->GetMethodID(env, X11NewtWindowClazz, "insetsChanged", "(ZIIII)V");
+    sizeChangedID = (*env)->GetMethodID(env, X11NewtWindowClazz, "sizeChanged", "(ZZIIZ)Z");
+    positionChangedID = (*env)->GetMethodID(env, X11NewtWindowClazz, "positionChanged", "(ZZII)Z");
     focusVisibleChangedID = (*env)->GetMethodID(env, X11NewtWindowClazz, "focusVisibleChanged", "(ZII)V");
     visibleChangedID = (*env)->GetMethodID(env, X11NewtWindowClazz, "visibleChanged", "(Z)V");
-    insetsVisibleChangedID = (*env)->GetMethodID(env, X11NewtWindowClazz, "insetsVisibleChanged", "(IIIII)V");
-    sizePosMaxInsetsVisibleChangedID = (*env)->GetMethodID(env, X11NewtWindowClazz, "sizePosMaxInsetsVisibleChanged", "(ZIIIIIIIIIIIZ)V");
+    insetsVisibleChangedID = (*env)->GetMethodID(env, X11NewtWindowClazz, "insetsVisibleChanged", "(ZIIIII)V");
+    sizePosMaxInsetsVisibleChangedID = (*env)->GetMethodID(env, X11NewtWindowClazz, "sizePosMaxInsetsVisibleChanged", "(ZZIIIIIIIIIIIZ)V");
     reparentNotifyID = (*env)->GetMethodID(env, X11NewtWindowClazz, "reparentNotify", "(J)V");
     windowDestroyNotifyID = (*env)->GetMethodID(env, X11NewtWindowClazz, "windowDestroyNotify", "(Z)Z");
     windowRepaintID = (*env)->GetMethodID(env, X11NewtWindowClazz, "windowRepaint", "(ZIIII)V");
@@ -758,13 +758,34 @@ JNIEXPORT void JNICALL Java_jogamp_newt_driver_x11_DisplayDriver_DispatchMessage
                 if ( evt.xconfigure.window == evt.xconfigure.event ) {
                     // ignore child window change notification
                     // insets: negative values are ignored
+                    int x_pos = evt.xconfigure.x;
+                    int y_pos = evt.xconfigure.y;
+                    {
+                        Window winRoot, winTopParent;
+                        Bool translated = False;
+                        if( 0 != NewtWindows_getRootAndParent(dpy, evt.xconfigure.window, &winRoot, &winTopParent) ) {
+                            int x_return=-1, y_return=-1;
+                            Window child;
+                            if( True == XTranslateCoordinates(dpy, evt.xconfigure.window, winRoot, 0, 0, &x_return, &y_return, &child) ) {
+                                DBG_PRINT( "X11: event . ConfigureNotify call %p POS (Xtrans) %d/%d -> %d/%d\n", 
+                                    (void*)evt.xconfigure.window, x_pos, y_pos, x_return, y_return);
+                                x_pos = x_return;
+                                y_pos = y_return;
+                                translated = True;
+                            }
+                        }
+                        if( False == translated ) {
+                            DBG_PRINT( "X11: event . ConfigureNotify call %p POS (raw) %d/%d\n", 
+                                (void*)evt.xconfigure.window, x_pos, y_pos);
+                        }
+                    }
                     int left=-1, right=-1, top=-1, bottom=-1;
                     uint32_t netWMState = NewtWindows_getNET_WM_STATE(dpy, jw);
                     int visibleChange = NewtWindows_updateVisibility(env, dpy, jw, netWMState, "ConfigureNotify");
                     NewtWindows_updateInsets(dpy, jw, False /* wait */, &left, &right, &top, &bottom);
                     Bool maxChanged = NewtWindows_updateMaximized(dpy, jw, netWMState);
-                    (*env)->CallVoidMethod(env, jw->jwindow, sizePosMaxInsetsVisibleChangedID, JNI_FALSE,
-                                            (jint) evt.xconfigure.x, (jint) evt.xconfigure.y,
+                    (*env)->CallVoidMethod(env, jw->jwindow, sizePosMaxInsetsVisibleChangedID, JNI_FALSE, JNI_FALSE,
+                                            (jint) x_pos, (jint) y_pos,
                                             (jint) evt.xconfigure.width, (jint) evt.xconfigure.height,
                                             (jint)(maxChanged ? ( jw->maxHorz ? 1 : 0 ) : -1), 
                                             (jint)(maxChanged ? ( jw->maxVert ? 1 : 0 ) : -1),
@@ -850,7 +871,7 @@ JNIEXPORT void JNICALL Java_jogamp_newt_driver_x11_DisplayDriver_DispatchMessage
                     // insets: negative values are ignored
                     int left=-1, right=-1, top=-1, bottom=-1;
                     if( NewtWindows_updateInsets(dpy, jw, False /* wait */, &left, &right, &top, &bottom) ) {
-                        (*env)->CallVoidMethod(env, jw->jwindow, insetsVisibleChangedID, left, right, top, bottom, 1);
+                        (*env)->CallVoidMethod(env, jw->jwindow, insetsVisibleChangedID, JNI_FALSE, left, right, top, bottom, 1);
                         NewtCommon_ExceptionCheck1_throwNewRuntimeException(env, "X11Display.DispatchMessages0: MapNotify: Exception occured at insetsVisibleChanged(..)");
                     } else {
                         (*env)->CallVoidMethod(env, jw->jwindow, visibleChangedID, JNI_TRUE);

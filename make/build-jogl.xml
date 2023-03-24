@@ -90,11 +90,18 @@
         <property name="java.part.gluegen-gl-rt" 
                   value="com/jogamp/gluegen/runtime/opengl/*"/>
 
+        <property name="java.part.core.shadercode"
+                  value="jogamp/opengl/shader/* jogamp/opengl/shader/bin/**"/>
+
+        <property name="java.part.core.assets"
+                  value="jogamp/opengl/assets/**"/>
+
         <property name="java.part.core.util"
-                  value="com/jogamp/opengl/util/* jogamp/opengl/util/* com/jogamp/opengl/util/glsl/* jogamp/opengl/util/glsl/* jogamp/opengl/shader/**"/>
+                  value="com/jogamp/opengl/util/* jogamp/opengl/util/* com/jogamp/opengl/util/glsl/* jogamp/opengl/util/glsl/* ${java.part.core.shadercode} ${java.part.core.assets}"/>
 
         <property name="java.part.core" 
                   value="${java.part.gluegen-gl-rt} com/jogamp/opengl/* com/jogamp/opengl/fixedfunc/* com/jogamp/opengl/math/** jogamp/opengl/* ${java.part.core.util}"/>
+
         <property name="java.part.core.exclude" value="com/jogamp/opengl/Debug* com/jogamp/opengl/Trace* com/jogamp/opengl/util/AWTAnimatorImpl* com/jogamp/opengl/util/PNG*"/>
 
         <property name="java.part.nv-cg"
@@ -158,7 +165,7 @@
                   value="com/jogamp/opengl/**/swt/**"/>
 
         <property name="java.part.util"
-                  value="com/jogamp/opengl/util/texture/** com/jogamp/opengl/util/av/* com/jogamp/opengl/util/packrect/** com/jogamp/opengl/util/PNG* com/jogamp/opengl/util/stereo/** jogamp/opengl/util/av/** jogamp/opengl/util/jpeg/** jogamp/opengl/util/pngj/** jogamp/opengl/util/stereo/**"/>
+                  value="com/jogamp/opengl/util/caps/** com/jogamp/opengl/util/texture/** com/jogamp/opengl/util/av/* com/jogamp/opengl/util/packrect/** com/jogamp/opengl/util/PNG* com/jogamp/opengl/util/stereo/** jogamp/opengl/util/av/** jogamp/opengl/util/jpeg/** jogamp/opengl/util/pngj/** jogamp/opengl/util/stereo/**"/>
 
         <property name="java.part.util.awt"
                   value="com/jogamp/opengl/util/**/awt/**"/>
@@ -175,9 +182,6 @@
         <property name="java.part.util.graph.fonts"
                   value="jogamp/graph/font/fonts/**"/>
 
-        <property name="java.part.core.shadercode"
-                  value="jogamp/opengl/shader/* jogamp/opengl/shader/bin/**"/>
-
         <property name="java.part.util.shadercode"
                   value="jogamp/opengl/util/stereo/shader/*"/>
 
@@ -191,7 +195,7 @@
                   value="jogamp/opengl/util/glsl/fixedfunc/shaders/* jogamp/opengl/util/glsl/fixedfunc/shaders/bin/**"/>
 
         <property name="java.part.nonjava" 
-                  value="${java.part.core.shadercode} ${java.part.util.shadercode} ${java.part.util.fixedfuncemu.shadercode} ${java.part.util.graph.shadercode} ${java.part.util.graph.fonts}"/>
+                  value="${java.part.core.assets} ${java.part.core.shadercode} ${java.part.util.shadercode} ${java.part.util.fixedfuncemu.shadercode} ${java.part.util.graph.shadercode} ${java.part.util.graph.fonts}"/>
 
         <!-- condition excludes -->
 
@@ -1111,10 +1115,9 @@
                debug="${javacdebug}" debuglevel="${javacdebuglevel}">
             <classpath refid="nativewindow_gluegen.classpath"/>
             <include name="jogamp/opengl/util/av/impl/FFMPEGStaticNatives.java" />
-            <include name="jogamp/opengl/util/av/impl/FFMPEGv08Natives.java" />
-            <include name="jogamp/opengl/util/av/impl/FFMPEGv09Natives.java" />
-            <include name="jogamp/opengl/util/av/impl/FFMPEGv10Natives.java" />
-            <include name="jogamp/opengl/util/av/impl/FFMPEGv11Natives.java" />
+            <include name="jogamp/opengl/util/av/impl/FFMPEGv0400Natives.java" />
+            <include name="jogamp/opengl/util/av/impl/FFMPEGv0500Natives.java" />
+            <include name="jogamp/opengl/util/av/impl/FFMPEGv0600Natives.java" />
           <compilerarg value="-implicit:none" />
         </javac>
 
@@ -1206,7 +1209,7 @@
         </javac>
     </target>
 
-        <!-- Perform the second pass Java compile; everything except portion of fixed function emulation depending on generated code. -->
+    <!-- Perform the second pass Java compile; everything except portion of fixed function emulation depending on generated code. -->
     <target name="java.compile.secondpass" depends="java.generate.composable.pipeline, java.compile.secondpass.openal, java.compile.secondpass.javase, java.compile.secondpass.android" />
 
     <target name="java.compile.thirdpass.javase">
@@ -1230,7 +1233,7 @@
     <target name="java.compile.thirdpass" depends="java.generate.composable.pipeline.custom, java.compile.thirdpass.javase" />
 
     <target name="java.compile" depends="java.compile.firstpass,java.compile.secondpass,java.compile.thirdpass">
-        <!-- make shadercode and fonts available in classpath -->
+        <!-- make shadercode, fonts etc available in classpath -->
         <copy todir="${classes}">
             <fileset dir="${src.java}"
                      includes="${java.part.nonjava}"
@@ -1525,10 +1528,6 @@
 
     <target name="c.configure" depends="c.configure.1,c.configure.2" />
 
-    <target name="rename.mingw.dll" if="isMingW">
-        <move file="${src}" tofile="${dest}" />
-    </target>
-
     <!-- Only compile the ffmpeg version depending source files 
          against their respective header files! 
          We do not use the resulting static libraries directly,
@@ -1583,7 +1582,7 @@
                 <sysincludepath path="${stub.includes.gluegen.cc}"/>
                 <includepath path="stub_includes/khr"/>
                 <includepath path="stub_includes/opengl"/>
-                <includepath path="stub_includes/libav/@{version.lav}"/>
+                <includepath path="stub_includes/ffmpeg/@{version.lav}"/>
       
                 <!-- This is for the generated headers for handwritten C code -->
                 <includepath path="${src.c}"/>
@@ -1619,10 +1618,9 @@
         <patternset id="c.obj.files.none">
         </patternset>
         <patternset id="c.obj.files.ffmpeg.inject">
-          <include name="${rootrel.obj.joglsub}/ffmpeg_lavc53_lavf53_lavu51.*"/>
-          <include name="${rootrel.obj.joglsub}/ffmpeg_lavc54_lavf54_lavu52_lavr01.*"/>
-          <include name="${rootrel.obj.joglsub}/ffmpeg_lavc55_lavf55_lavu53_lavr01.*"/>
-          <include name="${rootrel.obj.joglsub}/ffmpeg_lavc56_lavf56_lavu54_lavr02.*"/>
+          <include name="${rootrel.obj.joglsub}/ffmpeg_v0400.*"/> <!-- ffmpeg 4.x.y -->
+          <include name="${rootrel.obj.joglsub}/ffmpeg_v0500.*"/> <!-- ffmpeg 5.x.y -->
+          <include name="${rootrel.obj.joglsub}/ffmpeg_v0600.*"/> <!-- ffmpeg 6.x.y -->
         </patternset>
 
         <patternset id="c.src.files.jogl.desktop">
@@ -1689,7 +1687,7 @@
         <outofdate>
           <sourcefiles>
             <fileset dir="${project.root}"><patternset refid="@{c.compiler.src.files}"/></fileset>
-            <fileset dir="${obj.joglsub}" includes="*jogl_ffmpegv08*, *jogl_ffmpegv09*, *jogl_ffmpegv10*"/> <!-- requires linkage -->
+            <fileset dir="${obj.joglsub}" includes="*jogl_ffmpegv0400*, *jogl_ffmpegv0500*, *jogl_ffmpegv0600*"/> <!-- requires linkage -->
           </sourcefiles>
           <targetfiles>
             <fileset dir="${obj.jogl}" includes="${native.library.prefix}@{output.lib.name}.${native.library.suffix}"/>
@@ -1742,13 +1740,6 @@
               </linker>
             </cc>
     
-            <!-- FIXME: this is a hack; the cpptask should have an option to change the
-                 suffix or at least understand the override from so to dll -->
-            <antcall target="rename.mingw.dll" inheritRefs="true">
-                <param name="src"  value="${obj.jogl}/lib@{output.lib.name}.so" />
-                <param name="dest" value="${obj.jogl}/@{output.lib.name}.dll" />
-            </antcall>
-
             <gluegen.make.libsymbols builddir="${build}" 
                 nativelib="${obj.jogl}/${native.library.prefix}@{output.lib.name}.${native.library.suffix}"
                 symbolsfile="${obj.jogl}/${native.library.prefix}@{output.lib.name}.symbols"/>
@@ -1766,23 +1757,18 @@
     </macrodef>  
 
     <target name="c.build.jogl.ffmpeg" if="setup.addNativeFFmpeg">
-      <c.build.ffmpeg version.lav="lavc53_lavf53_lavu51"
-               output.lib.name="jogl_ffmpegv08"
+      <c.build.ffmpeg version.lav="v0400"
+               output.lib.name="jogl_ffmpegv0400"
                compiler.cfg.id="${compiler.cfg.id}"
                linker.cfg.id="${linker.cfg.id.os}"/>
 
-      <c.build.ffmpeg version.lav="lavc54_lavf54_lavu52_lavr01"
-               output.lib.name="jogl_ffmpegv09"
+      <c.build.ffmpeg version.lav="v0500"
+               output.lib.name="jogl_ffmpegv0500"
                compiler.cfg.id="${compiler.cfg.id}"
                linker.cfg.id="${linker.cfg.id.os}"/>
 
-      <c.build.ffmpeg version.lav="lavc55_lavf55_lavu53_lavr01"
-               output.lib.name="jogl_ffmpegv10"
-               compiler.cfg.id="${compiler.cfg.id}"
-               linker.cfg.id="${linker.cfg.id.os}"/>
-
-      <c.build.ffmpeg version.lav="lavc56_lavf56_lavu54_lavr02"
-               output.lib.name="jogl_ffmpegv11"
+      <c.build.ffmpeg version.lav="v0600"
+               output.lib.name="jogl_ffmpegv0600"
                compiler.cfg.id="${compiler.cfg.id}"
                linker.cfg.id="${linker.cfg.id.os}"/>
     </target>
@@ -1968,7 +1954,6 @@
             <fileset dir="${classes}"
                      includes="${java.part.util} ${java.part.util.glsl} ${java.part.openal}"
                      excludes="${java.part.util.awt} ${java.part.util.gldesktop} ${java.part.util.fixedfuncemu} ${java.part.util.graph}"/>
-            <fileset dir="resources/assets" includes="jogl/util/data/**" />
         </jar>
         <jar manifest="${build.jogl}/manifest.mf" destfile="${jogl-util-graph.jar}" filesonly="true">
             <fileset dir="${classes}"

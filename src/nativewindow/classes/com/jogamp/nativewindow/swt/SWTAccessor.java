@@ -32,7 +32,6 @@ import com.jogamp.common.os.Platform;
 import java.io.PrintStream;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.security.AccessController;
 import java.security.PrivilegedAction;
 
 import org.eclipse.swt.SWT;
@@ -50,6 +49,7 @@ import com.jogamp.nativewindow.AbstractGraphicsDevice;
 import com.jogamp.nativewindow.NativeWindowFactory;
 import com.jogamp.nativewindow.VisualIDHolder;
 import com.jogamp.common.util.ReflectionUtil;
+import com.jogamp.common.util.SecurityUtil;
 import com.jogamp.common.util.VersionNumber;
 import com.jogamp.nativewindow.macosx.MacOSXGraphicsDevice;
 import com.jogamp.nativewindow.windows.WindowsGraphicsDevice;
@@ -95,6 +95,7 @@ public class SWTAccessor {
 
     private static final String str_OS_gtk_class = "org.eclipse.swt.internal.gtk.OS";    // used by earlier versions of SWT
     private static final String str_GTK_gtk_class = "org.eclipse.swt.internal.gtk.GTK";  // used by later versions of SWT
+    private static final String str_GTK3_gtk_class = "org.eclipse.swt.internal.gtk3.GTK3";  // used by later versions of SWT (4.21+)
     private static final String str_GDK_gtk_class = "org.eclipse.swt.internal.gtk.GDK";  // used by later versions of SWT
     public static final Class<?> OS_gtk_class;
     private static final String str_OS_gtk_version = "GTK_VERSION";
@@ -109,8 +110,6 @@ public class SWTAccessor {
     private static final Method OS_gdk_window_get_display;
     private static final Method OS_gdk_x11_drawable_get_xid;
     private static final Method OS_gdk_x11_window_get_xid;
-    private static final Method OS_gdk_window_set_back_pixmap;
-    private static final Method OS_gdk_window_set_background_pattern;
 
     private static final String str_gtk_widget_realize = "gtk_widget_realize";
     private static final String str_gtk_widget_unrealize = "gtk_widget_unrealize";
@@ -121,13 +120,12 @@ public class SWTAccessor {
     private static final String str_gdk_window_get_display = "gdk_window_get_display";
     private static final String str_gdk_x11_drawable_get_xid = "gdk_x11_drawable_get_xid";
     private static final String str_gdk_x11_window_get_xid = "gdk_x11_window_get_xid";
-    private static final String str_gdk_window_set_back_pixmap = "gdk_window_set_back_pixmap";
-    private static final String str_gdk_window_set_background_pattern = "gdk_window_set_background_pattern";
 
     private static final VersionNumber GTK_VERSION_2_14_0 = new VersionNumber(2, 14, 0);
     private static final VersionNumber GTK_VERSION_2_24_0 = new VersionNumber(2, 24, 0);
     private static final VersionNumber GTK_VERSION_2_90_0 = new VersionNumber(2, 90, 0);
     private static final VersionNumber GTK_VERSION_3_0_0  = new VersionNumber(3,  0, 0);
+    // private static final VersionNumber GTK_VERSION_4_0_0  = new VersionNumber(4,  0, 0);
 
     private static VersionNumber GTK_VERSION(final int version) {
         // return (major << 16) + (minor << 8) + micro;
@@ -138,7 +136,11 @@ public class SWTAccessor {
     }
 
     static {
-        AccessController.doPrivileged(new PrivilegedAction<Object>() {
+        final int SWT_VERSION_4_20 = 4944;
+        // final int SWT_VERSION_4_26 = 4956;
+        // major * 1000 + minor;
+
+        SecurityUtil.doPrivileged(new PrivilegedAction<Object>() {
             @Override
             public Object run() {
                 NativeWindowFactory.initSingleton(); // last resort ..
@@ -149,6 +151,11 @@ public class SWTAccessor {
         isOSX = NativeWindowFactory.TYPE_MACOSX == nwt;
         isWindows = NativeWindowFactory.TYPE_WINDOWS == nwt;
         isX11 = NativeWindowFactory.TYPE_X11 == nwt;
+        final int swt_version = SWT.getVersion();
+
+        if( DEBUG ) {
+            System.err.println("SWT: Platform: "+SWT.getPlatform()+", Version: "+swt_version);
+        }
 
         Method m = null;
         try {
@@ -157,7 +164,7 @@ public class SWTAccessor {
         } catch (final Exception ex) {
             m = null;
             if( DEBUG ) {
-                System.err.println("getLocationInPixels not implemented: "+ex.getMessage());
+                System.err.println("SWT: getLocationInPixels not implemented: "+ex.getMessage());
             }
         }
         swt_control_locationInPixels = m;
@@ -169,7 +176,7 @@ public class SWTAccessor {
         } catch (final Exception ex) {
             m = null;
             if( DEBUG ) {
-                System.err.println("getSizeInPixels not implemented: "+ex.getMessage());
+                System.err.println("SWT: getSizeInPixels not implemented: "+ex.getMessage());
             }
         }
         swt_control_sizeInPixels = m;
@@ -181,7 +188,7 @@ public class SWTAccessor {
         } catch (final Exception ex) {
             m = null;
             if( DEBUG ) {
-                System.err.println("getClientAreaInPixels not implemented: "+ex.getMessage());
+                System.err.println("SWT: getClientAreaInPixels not implemented: "+ex.getMessage());
             }
         }
         swt_scrollable_clientAreaInPixels = m;
@@ -193,7 +200,7 @@ public class SWTAccessor {
         } catch (final Exception ex) {
             m = null;
             if( DEBUG ) {
-                System.err.println("getScalingFactor not implemented: "+ex.getMessage());
+                System.err.println("SWT: getScalingFactor not implemented: "+ex.getMessage());
             }
         }
         swt_dpiutil_getScalingFactor = m;
@@ -240,7 +247,8 @@ public class SWTAccessor {
 
         Class<?> cGTK=null;
         VersionNumber _gtk_version = new VersionNumber(0, 0, 0);
-        Method m1=null, m2=null, m3=null, m4=null, m5=null, m6=null, m7=null, m8=null, m9=null, ma=null, mb=null;
+        Method m1=null, m2=null, m3=null, m4=null, m5=null, m6=null, m7=null, m8=null, m9=null;
+        final Method ma=null, mb=null;
         final Class<?> handleType = swt_uses_long_handles  ? long.class : int.class ;
         if( isX11 ) {
             // mandatory
@@ -259,9 +267,17 @@ public class SWTAccessor {
                     cGDK = ReflectionUtil.getClass(str_GDK_gtk_class, false, cl);
                 }
                 _gtk_version = GTK_VERSION(field_OS_gtk_version.getInt(null));
+                if( DEBUG ) {
+                    System.err.println("SWT: GTK Version: "+_gtk_version.toString());
+                }
                 m1 = cGTK.getDeclaredMethod(str_gtk_widget_realize, handleType);
                 if (_gtk_version.compareTo(GTK_VERSION_2_14_0) >= 0) {
-                    m4 = cGTK.getDeclaredMethod(str_gtk_widget_get_window, handleType);
+                    if (swt_version < SWT_VERSION_4_20) {
+                        m4 = cGTK.getDeclaredMethod(str_gtk_widget_get_window, handleType);
+                    } else {
+                        final Class<?> cGTK3 = ReflectionUtil.getClass(str_GTK3_gtk_class, false, cl);
+                        m4 = cGTK3.getDeclaredMethod(str_gtk_widget_get_window, handleType);
+                    }
                 } else {
                     m3 = cGTK.getDeclaredMethod(str_GTK_WIDGET_WINDOW, handleType);
                 }
@@ -275,12 +291,6 @@ public class SWTAccessor {
                     m9 = cGDK.getDeclaredMethod(str_gdk_x11_window_get_xid, handleType);
                 } else {
                     m8 = cGTK.getDeclaredMethod(str_gdk_x11_drawable_get_xid, handleType);
-                }
-
-                if (_gtk_version.compareTo(GTK_VERSION_2_90_0) >= 0) {
-                    mb = cGDK.getDeclaredMethod(str_gdk_window_set_background_pattern, handleType, handleType);
-                } else {
-                    ma = cGTK.getDeclaredMethod(str_gdk_window_set_back_pixmap, handleType, handleType, boolean.class);
                 }
             } catch (final Exception ex) { throw new NativeWindowException(ex); }
             // optional
@@ -299,11 +309,23 @@ public class SWTAccessor {
         OS_gdk_window_get_display = m7;
         OS_gdk_x11_drawable_get_xid = m8;
         OS_gdk_x11_window_get_xid = m9;
-        OS_gdk_window_set_back_pixmap = ma;
-        OS_gdk_window_set_background_pattern = mb;
 
         isX11GTK = isX11 && null != OS_gtk_class;
+
+        if( DEBUG ) {
+            printInfo(System.err, null);
+        }
     }
+
+    /**
+     * Call this method, if this class shall be initialized before any other of its methods are called
+     * within the regular workflow.
+     *
+     * This could be desired to ensure initialization before AWT.
+     *
+     * This method does nothing, but initializes this class's static SWT accessors if using this class for the first time.
+     */
+    public static void initSingleton() {}
 
     private static Number getIntOrLong(final long arg) {
         if(swt_uses_long_handles) {
@@ -316,10 +338,12 @@ public class SWTAccessor {
         ReflectionUtil.callMethod(null, m, new Object[] { getIntOrLong(arg) });
     }
 
+    @SuppressWarnings("unused")
     private static void callStaticMethodLL2V(final Method m, final long arg0, final long arg1) {
         ReflectionUtil.callMethod(null, m, new Object[] { getIntOrLong(arg0), getIntOrLong(arg1) });
     }
 
+    @SuppressWarnings("unused")
     private static void callStaticMethodLLZ2V(final Method m, final long arg0, final long arg1, final boolean arg3) {
         ReflectionUtil.callMethod(null, m, new Object[] { getIntOrLong(arg0), getIntOrLong(arg1), Boolean.valueOf(arg3) });
     }
@@ -391,16 +415,6 @@ public class SWTAccessor {
         return xWindow;
     }
 
-    public static void gdk_window_set_back_pixmap(final long window, final long pixmap, final boolean parent_relative) {
-       if(OS_gdk_window_set_back_pixmap != null) {
-           callStaticMethodLLZ2V(OS_gdk_window_set_back_pixmap, window, pixmap, parent_relative);
-       }
-       // in recent GTK, can't set background to pixmap any more; this sets it relative to parent
-       else if(OS_gdk_window_set_background_pattern != null) {
-               callStaticMethodLL2V(OS_gdk_window_set_background_pattern, window, 0);
-       }
-    }
-
     //
     // Common any toolkit
     //
@@ -409,7 +423,8 @@ public class SWTAccessor {
         out.println("SWT: isX11 "+isX11+", isX11GTK "+isX11GTK+" (GTK Version: "+OS_gtk_version+")");
         out.println("SWT: isOSX "+isOSX+", isWindows "+isWindows);
         out.println("SWT: DeviceZoom: "+DPIUtil.getDeviceZoom()+", deviceZoomScalingFactor "+getDeviceZoomScalingFactor());
-        out.println("SWT: Display.DPI "+d.getDPI()+"; DPIUtil: autoScalingFactor "+
+        final Point dpi = null != d ? d.getDPI() : null;
+        out.println("SWT: Display.DPI "+dpi+"; DPIUtil: autoScalingFactor "+
                         getAutoScalingFactor()+" (use-swt "+(null != swt_dpiutil_getScalingFactor)+
                         "), useCairoAutoScale "+DPIUtil.useCairoAutoScale());
     }
@@ -775,7 +790,6 @@ public class SWTAccessor {
     * <ul>
     *   <li>Mac OSX
     *   <ul>
-    *     <!--li>AWT EDT: In case AWT is available, the AWT EDT is the OSX UI main thread</li-->
     *     <li><i>Main Thread</i>: Run on OSX UI main thread. 'wait' is implemented on Java site via lock/wait on {@link RunnableTask} to not freeze OSX main thread.</li>
     *   </ul></li>
     *   <li>Linux, Windows, ..
@@ -788,7 +802,7 @@ public class SWTAccessor {
     */
     public static void invokeOnOSTKThread(final boolean blocking, final Runnable runnable) {
         if( isOSX ) {
-            // Use SWT main thread! Only reliable config w/ -XStartOnMainThread !?
+            // Use SWT main thread! Only reliable config w/ -XstartOnFirstThread - or - AWT enabled, i.e. `-Djava.awt.headless=false`
             OSXUtil.RunOnMainThread(blocking, false, runnable);
         } else {
             runnable.run();

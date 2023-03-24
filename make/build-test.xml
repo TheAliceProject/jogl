@@ -28,16 +28,42 @@
         <property name="classes.path"         location="${classes}"/> <!-- absolute path -->
         <property name="classes.demos"        value="${build.demos}/classes" />
 
-        <property name="java.part.demo.mobile" value="com/jogamp/opengl/demos/**"/>
-        <property name="java.part.test.all" value="com/jogamp/opengl/test/** jogamp/**"/>
-        <property name="java.part.test.android" value="com/jogamp/opengl/test/android/**"/>
+        <property name="java.part.demo"       value="com/jogamp/opengl/demos/**"/>
+        <property name="java.part.demo.android" value="com/jogamp/opengl/demos/android/**"/>
+        <property name="java.part.test.all"   value="com/jogamp/opengl/test/** jogamp/**"/>
         <property name="java.part.test.oculusvr" value="com/jogamp/opengl/test/junit/jogl/stereo/ovr/**"/>
         <property name="java.dir.test"        value="com/jogamp/opengl/test"/>
         <property name="java.dir.junit"       value="${java.dir.test}/junit"/>
         <property name="java.dir.bugs"        value="${java.dir.test}/bugs"/>
 
         <property name="test.archive.name"    value="${archive.name}-test-results-${build.node.name}"/>
+
+        <!-- not required:     java.base/java.lang=ALL-UNNAMED -->
+        <!-- required for AWT: java.desktop/sun.awt=ALL-UNNAMED java.desktop/sun.java2d=ALL-UNNAMED -->
+        <condition property="jvmarg.modules"  value="--add-opens java.desktop/sun.awt=ALL-UNNAMED --add-opens java.desktop/sun.java2d=ALL-UNNAMED">
+            <isset property="minJava17"/>
+        </condition>
+        <condition property="jvmarg.modules"  value="--illegal-access=warn">
+            <and>
+                <isset property="minJava11"/>
+                <not>
+                    <isset property="minJava17"/>
+                </not>
+            </and>
+        </condition>
+        <property name="jvmarg.modules"      value=""/> <!-- default is empty -->
+        <property name="jvmarg.generic"      value="${jvmarg.modules}"/>
+
         <property name="jvmarg.headless"      value="-Djava.awt.headless=true"/>
+
+        <!-- NOTE: the value of the jvmarg.swt.headless property will not be overridden if already set (by conditional isOSX) -->
+        <condition property="jvmarg.swt.headless" value="-XstartOnFirstThread -Djava.awt.headless=true"><isset property="isOSX"/></condition>
+        <property name="jvmarg.swt.headless"  value="-Djava.awt.headless=true"/>
+
+        <echo message="jvmarg.modules        ${jvmarg.modules}"/>
+        <echo message="jvmarg.generic        ${jvmarg.generic}"/>
+        <echo message="jvmarg.headless       ${jvmarg.headless}"/>
+        <echo message="jvmarg.swt.headless   ${jvmarg.swt.headless}"/>
 
         <property name="batchtest.timeout"    value="1800000"/> <!-- 30 min -->
     </target>
@@ -57,7 +83,7 @@
             <fileset dir="." includes="*.tga" />
             <fileset dir="." includes="hs_err_pid*.log" />
             <fileset file="${jogl-test.jar}" />
-            <fileset file="${jogl-demos-mobile.jar}" />
+            <fileset file="${jogl-demos.jar}" />
         </delete>
     </target>
 
@@ -66,8 +92,9 @@
        - Build/run tests/junit.
       -->
 
-    <target name="make.demos.mobile">
+    <target name="make.demos">
         <javac destdir="${classes.demos}"
+               excludes="${java.part.demo.android} ${java.part.demo.oculusvr}"
                fork="yes"
                includeAntRuntime="false"
                memoryMaximumSize="${javac.memorymax}"
@@ -80,7 +107,7 @@
             <src path="${src.demos}" />
         </javac>
         <copy file="joglversion-test"
-            tofile="${build.test}/manifest-demo-mobile.mf"
+            tofile="${build.test}/manifest-demo.mf"
             overwrite="true">
             <filterset>
                 <filter token="VERSION" value="${jogamp.version}"/>
@@ -97,15 +124,82 @@
                 <exclude name="**/*.java"/>
             </fileset>
         </copy>
-        <jar manifest="${build.test}/manifest-demo-mobile.mf" destfile="${jogl-demos-mobile.jar}" filesonly="true">
+        <jar manifest="${build.test}/manifest-demo.mf" destfile="${jogl-demos.jar}" filesonly="true">
             <fileset dir="${classes.demos}" 
+                     excludes="${java.part.demo.android}"
                      includes="**"/>
             <fileset dir="resources/assets-test" includes="**" />
         </jar>
     </target>
+
+    <target name="demo.compile.android" if="android-jars.available">
+        <!-- Perform the junit pass Java Android compile -->
+        <javac destdir="${classes.demos}"
+               excludes="${java.part.demo.oculusvr}"
+               fork="yes"
+               includeAntRuntime="false"
+               memoryMaximumSize="${javac.memorymax}"
+               encoding="UTF-8"
+               source="${target.sourcelevel}" 
+               target="${target.targetlevel}"
+               bootclasspath="${target.rt.jar}"
+               debug="${javacdebug}" debuglevel="${javacdebuglevel}">
+            <classpath refid="junit_jogl_newt_android.compile.classpath"/>
+            <src path="${src.demos}" />
+        </javac>
+        <copy file="joglversion-demo-android"
+            tofile="${build.test}/manifest-demo-android.mf"
+            overwrite="true">
+            <filterset>
+                <filter token="VERSION" value="${jogamp.version}"/>
+                <filter token="BUILD_VERSION" value="${jogl.version}"/>
+                <filter token="SCM_BRANCH" value="${jogl.build.branch}"/>
+                <filter token="SCM_COMMIT" value="${jogl.build.commit}"/>
+                <filter token="BASEVERSION" value="${jogamp.version.base}"/>
+            </filterset>
+        </copy>
+
+        <jar manifest="${build.test}/manifest-demo-android.mf" destfile="${jogl-demo-android.jar}" filesonly="true">
+            <!-- get all class files, but skip any resource files that external tools
+                 might have copied into the class directory (otherwise, it's possible
+                 to get the same resource file twice in the jar) -->
+            <fileset dir="${classes.demos}"/>
+            <fileset dir="resources/assets-test" includes="**" />
+        </jar>
+    </target>
+
+    <target name="demo.package.android" depends="demo.compile.android" if="isAndroid">
+        <aapt.signed 
+            assetsdir="resources/assets-test"
+            jarsrcdir="${src}/demos"
+            jarbuilddir="${jar}"
+            jarbasename="jogl-demo-android"
+            nativebuilddir="${lib}"
+            nativebasename="non-existing"
+            androidmanifest.path="resources/android/AndroidManifest-demo.xml"
+            androidresources.path="resources/android/res-demo"
+            jarmanifest.path="${build.test}/manifest-demo-android.mf"
+            version.code="${jogamp.version.int}"
+            version.name="${jogamp.version}">
+          <d8-classpaths>
+              <arg line="--classpath ${gluegen-rt-android.jar}"/> 
+              <arg line="--classpath ${joal.jar}"/> 
+              <arg line="--classpath ${jogl-all-android.jar}"/> 
+              <arg line="--classpath ${gluegen-test-util.jar}"/> 
+              <arg line="--classpath ${junit.jar}"/> 
+              <arg line="--classpath ${ant.jar}"/> 
+              <arg line="--classpath ${ant-junit.jar}"/> 
+              <arg line="--classpath ${ant-junit4.jar}"/> 
+              <arg line="--classpath ${semver.jar}"/> 
+              <arg line="--classpath ${project.root}/make/lib/openjfx/11/javafx-base-11.jar"/>
+              <arg line="--classpath ${project.root}/make/lib/openjfx/11/javafx-graphics-11.jar"/>
+          </d8-classpaths>
+        </aapt.signed>
+    </target>
+
     <target name="test.compile.javase.generic" unless="setup.noAWT">
         <javac destdir="${classes}"
-               excludes="${java.part.test.android} ${java.part.test.oculusvr}"
+               excludes="${java.part.test.oculusvr}"
                fork="yes"
                includeAntRuntime="false"
                memoryMaximumSize="${javac.memorymax}"
@@ -121,7 +215,6 @@
     <target name="test.compile.javase.oculusvr" if="oculusvr.sdk.available">
         <javac destdir="${classes}"
                includes="${java.part.test.oculusvr}"
-               excludes="${java.part.test.android}"
                fork="yes"
                includeAntRuntime="false"
                memoryMaximumSize="${javac.memorymax}"
@@ -153,78 +246,9 @@
                  might have copied into the class directory (otherwise, it's possible
                  to get the same resource file twice in the jar) -->
             <fileset dir="${classes}" 
-                     includes="${java.part.test.all}"
-                     excludes="${java.part.test.android}"/>
-            <fileset dir="resources/assets-test" includes="**" />
-        </jar>
-    </target>
-
-    <target name="test.compile.android" if="android-jars.available" unless="setup.noAWT">
-        <!-- Perform the junit pass Java Android compile -->
-        <javac destdir="${classes}"
-               excludes="${java.part.test.oculusvr}"
-               fork="yes"
-               includeAntRuntime="false"
-               memoryMaximumSize="${javac.memorymax}"
-               encoding="UTF-8"
-               source="${target.sourcelevel}" 
-               target="${target.targetlevel}"
-               bootclasspath="${target.rt.jar}"
-               debug="${javacdebug}" debuglevel="${javacdebuglevel}">
-            <classpath refid="junit_jogl_newt_android.compile.classpath"/>
-            <src path="${src.test}" />
-        </javac>
-        <copy file="joglversion-test-android"
-            tofile="${build.test}/manifest-test-android.mf"
-            overwrite="true">
-            <filterset>
-                <filter token="VERSION" value="${jogamp.version}"/>
-                <filter token="BUILD_VERSION" value="${jogl.version}"/>
-                <filter token="SCM_BRANCH" value="${jogl.build.branch}"/>
-                <filter token="SCM_COMMIT" value="${jogl.build.commit}"/>
-                <filter token="BASEVERSION" value="${jogamp.version.base}"/>
-            </filterset>
-        </copy>
-
-        <jar manifest="${build.test}/manifest-test-android.mf" destfile="${jogl-test-android.jar}" filesonly="true">
-            <!-- get all class files, but skip any resource files that external tools
-                 might have copied into the class directory (otherwise, it's possible
-                 to get the same resource file twice in the jar) -->
-            <fileset dir="${classes}" 
                      includes="${java.part.test.all}"/>
             <fileset dir="resources/assets-test" includes="**" />
         </jar>
-    </target>
-
-    <target name="test.package.android" depends="test.compile.android" if="isAndroid" unless="setup.noAWT">
-        <aapt.signed 
-            assetsdir="resources/assets-test"
-            jarsrcdir="${src}/test"
-            jarbuilddir="${jar}"
-            jarbasename="jogl-test-android"
-            nativebuilddir="${lib}"
-            nativebasename="non-existing"
-            androidmanifest.path="resources/android/AndroidManifest-test.xml"
-            androidresources.path="resources/android/res-test"
-            jarmanifest.path="${build.test}/manifest-test-android.mf"
-            version.code="${jogamp.version.int}"
-            version.name="${jogamp.version}">
-          <d8-classpaths>
-              <arg line="--classpath ${gluegen-rt-android.jar}"/> 
-              <arg line="--classpath ${joal.jar}"/> 
-              <arg line="--classpath ${jogl-all.jar}"/> 
-              <arg line="--classpath ${jogl-all-android.jar}"/> 
-              <arg line="--classpath ${gluegen-test-util.jar}"/> 
-              <arg line="--classpath ${junit.jar}"/> 
-              <arg line="--classpath ${ant.jar}"/> 
-              <arg line="--classpath ${ant-junit.jar}"/> 
-              <arg line="--classpath ${ant-junit4.jar}"/> 
-              <arg line="--classpath ${semver.jar}"/> 
-              <arg line="--classpath ${swt.jar}"/> 
-              <arg line="--classpath ${project.root}/make/lib/openjfx/11/javafx-base-11.jar"/>
-              <arg line="--classpath ${project.root}/make/lib/openjfx/11/javafx-graphics-11.jar"/>
-          </d8-classpaths>
-        </aapt.signed>
     </target>
 
     <target name="test.compile.check" depends="declare.common">
@@ -238,6 +262,7 @@
       <uptodate property="test.compile.skip">
         <srcfiles dir= "."                 includes="*.xml"/>
         <srcfiles dir= "${src.test}"       includes="**"/>
+        <srcfiles dir= "${src.demos}"      includes="**"/>
         <srcfiles dir= "resources/android" includes="**/*.xml"/>
         <srcfiles                          file="${gluegen-rt.jar}" />
         <srcfiles                          dir="${src}/nativewindow" />
@@ -254,9 +279,9 @@
                 <exclude name="**/*.java"/>
             </fileset>
         </copy>
-        <antcall target="make.demos.mobile" inheritRefs="true" inheritAll="true"/>
+        <antcall target="make.demos" inheritRefs="true" inheritAll="true"/>
+        <antcall target="demo.package.android" inheritRefs="true" inheritAll="true"/>
         <antcall target="test.compile.javase" inheritRefs="true" inheritAll="true"/>
-        <antcall target="test.package.android" inheritRefs="true" inheritAll="true"/>
     </target>
 
     <target name="test.manual.run" depends="test.compile, junit.run.settings">
@@ -293,6 +318,7 @@
                 <arg line="${junit.run.arg1}"/>
                 <arg line="${jvmDataModel.arg}"/>
                 <arg value="-Djava.library.path=${obj.all.paths}"/>
+                <arg line="${jvmarg.generic}"/>
                 <!--
                 <arg line="-Dnewt.debug.EDT"/>
                 -->
@@ -318,6 +344,7 @@
             <jvmarg value="${junit.run.arg1}"/>
             <jvmarg value="${jvmDataModel.arg}"/>
             <jvmarg value="-Djava.library.path=${obj.all.paths}"/>
+            <jvmarg line="${jvmarg.generic}"/>
 
             <!--
             <jvmarg value="-Djogl.debug=all"/>
@@ -392,6 +419,7 @@
                 <arg line="${junit.run.arg1}"/>
                 <arg line="${jvmDataModel.arg}"/>
                 <arg value="-Djava.library.path=${obj.all.paths}"/>
+                <arg line="${jvmarg.generic}"/>
                 <arg line="${jvmarg.headless}"/>
                 <!--
                 <arg line="-Dnewt.debug.EDT"/>
@@ -439,6 +467,7 @@
             <jvmarg value="${junit.run.arg1}"/>
             <jvmarg value="${jvmDataModel.arg}"/>
             <jvmarg value="-Djava.library.path=${obj.all.paths}"/>
+            <jvmarg line="${jvmarg.generic}"/>
 
             <!--
             <jvmarg value="-Dnewt.debug.EDT"/>
@@ -484,6 +513,7 @@
             <jvmarg value="${junit.run.arg1}"/>
             <jvmarg value="${jvmDataModel.arg}"/>
             <jvmarg value="-Djava.library.path=${obj.all.paths}"/>
+            <jvmarg line="${jvmarg.generic}"/>
 
             <!--
             <jvmarg value="-Djogl.debug=all"/>
@@ -534,6 +564,7 @@
             <jvmarg value="${junit.run.arg1}"/>
             <jvmarg value="${jvmDataModel.arg}"/>
             <jvmarg value="-Djava.library.path=${obj.all.paths}"/>
+            <jvmarg line="${jvmarg.generic}"/>
 
             <!--
             <jvmarg value="-Dnewt.debug.EDT"/>
@@ -626,6 +657,7 @@
             <jvmarg value="${junit.run.arg1}"/>
             <jvmarg value="${jvmDataModel.arg}"/>
             <jvmarg value="-Djava.library.path=${obj.all.paths}"/>
+            <jvmarg line="${jvmarg.generic}"/>
 
             <!--
             <jvmarg value="-Djogl.debug=all"/>
@@ -668,6 +700,7 @@
             <arg line="${junit.run.arg1}"/>
             <arg line="${jvmDataModel.arg}"/>
             <arg value="-Djava.library.path=${obj.all.paths}"/>
+            <arg line="${jvmarg.generic}"/>
             <arg line="${jvmarg.headless}"/>
             <!--
             <arg line="-Dnewt.debug.EDT"/>
@@ -735,7 +768,8 @@
                 <arg line="${junit.run.arg1}"/>
                 <arg line="${jvmDataModel.arg}"/>
                 <arg value="-Djava.library.path=${obj.all.paths}"/>
-                <arg line="${jvmarg.headless}"/>
+                <arg line="${jvmarg.generic}"/>
+                <arg line="${jvmarg.swt.headless}"/>
                 <!--
                 <arg line="-Dnewt.debug.EDT"/>
                 -->
@@ -809,6 +843,7 @@
                 <arg line="${junit.run.arg1}"/>
                 <arg line="${jvmDataModel.arg}"/>
                 <arg value="-Djava.library.path=${obj.all.paths}"/>
+                <arg line="${jvmarg.generic}"/>
                 <!--
                 <arg line="-Dnewt.debug.EDT"/>
                 <arg line="-Dnativewindow.debug=all"/>

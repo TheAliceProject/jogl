@@ -1,6 +1,6 @@
 /*
+ * Copyright (c) 2010-2023 JogAmp Community. All rights reserved.
  * Copyright (c) 2008-2009 Sun Microsystems, Inc. All Rights Reserved.
- * Copyright (c) 2010 JogAmp Community. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -35,7 +35,6 @@ package com.jogamp.nativewindow;
 
 import java.io.File;
 import java.lang.reflect.Method;
-import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -44,6 +43,7 @@ import java.util.List;
 import java.util.Map;
 
 import com.jogamp.nativewindow.util.Point;
+
 import jogamp.common.os.PlatformPropsImpl;
 import jogamp.nativewindow.BcmVCArtifacts;
 import jogamp.nativewindow.Debug;
@@ -51,25 +51,12 @@ import jogamp.nativewindow.NativeWindowFactoryImpl;
 import jogamp.nativewindow.ResourceToolkitLock;
 import jogamp.nativewindow.ToolkitProperties;
 import jogamp.nativewindow.WrappedWindow;
-import jogamp.nativewindow.ios.IOSUtil;
-import jogamp.nativewindow.macosx.OSXUtil;
-import jogamp.nativewindow.windows.GDIUtil;
-import jogamp.nativewindow.x11.X11Lib;
-import jogamp.nativewindow.x11.X11Util;
 
 import com.jogamp.common.os.Platform;
 import com.jogamp.common.util.InterruptSource;
 import com.jogamp.common.util.PropertyAccess;
 import com.jogamp.common.util.ReflectionUtil;
-import com.jogamp.nativewindow.UpstreamWindowHookMutableSizePos;
-import com.jogamp.nativewindow.awt.AWTGraphicsDevice;
-import com.jogamp.nativewindow.awt.AWTGraphicsScreen;
-import com.jogamp.nativewindow.egl.EGLGraphicsDevice;
-import com.jogamp.nativewindow.ios.IOSGraphicsDevice;
-import com.jogamp.nativewindow.macosx.MacOSXGraphicsDevice;
-import com.jogamp.nativewindow.windows.WindowsGraphicsDevice;
-import com.jogamp.nativewindow.x11.X11GraphicsDevice;
-import com.jogamp.nativewindow.x11.X11GraphicsScreen;
+import com.jogamp.common.util.SecurityUtil;
 
 /** Provides a pluggable mechanism for arbitrary window toolkits to
     adapt their components to the {@link NativeWindow} interface,
@@ -233,7 +220,7 @@ public abstract class NativeWindowFactory {
         final String[] _tmp = new String[] { null };
         final String[] _nativeWindowingTypeNative = new String[] { null };
 
-        AccessController.doPrivileged(new PrivilegedAction<Object>() {
+        SecurityUtil.doPrivileged(new PrivilegedAction<Object>() {
             @Override
             public Object run() {
                 Platform.initSingleton(); // last resort ..
@@ -398,7 +385,7 @@ public abstract class NativeWindowFactory {
             if( Platform.AWT_AVAILABLE &&
                 ReflectionUtil.isClassAvailable("com.jogamp.nativewindow.awt.AWTGraphicsDevice", cl) ) {
 
-                final Method[] jawtUtilMethods = AccessController.doPrivileged(new PrivilegedAction<Method[]>() {
+                final Method[] jawtUtilMethods = SecurityUtil.doPrivileged(new PrivilegedAction<Method[]>() {
                     @Override
                     public Method[] run() {
                         try {
@@ -555,24 +542,6 @@ public abstract class NativeWindowFactory {
     }
 
     /**
-     * Provides the default {@link ToolkitLock} for <code>type</code> and <code>deviceHandle</code>.
-     * <ul>
-     *   <li> JAWT {@link ToolkitLock} if required and <code>type</code> is of {@link #TYPE_AWT} and AWT available,</li>
-     *   <li> {@link jogamp.nativewindow.ResourceToolkitLock} if required, otherwise</li>
-     *   <li> {@link jogamp.nativewindow.NullToolkitLock} </li>
-     * </ul>
-     */
-    public static ToolkitLock getDefaultToolkitLock(final String type, final long deviceHandle) {
-        if( requiresToolkitLock ) {
-            if( TYPE_AWT == type && isAWTAvailable() ) { // uses .intern()!
-                return getAWTToolkitLock();
-            }
-            return ResourceToolkitLock.create();
-        }
-        return NativeWindowFactoryImpl.getNullToolkitLock();
-    }
-
-    /**
      * @param device
      * @param screen -1 is default screen of the given device, e.g. maybe 0 or determined by native API. >= 0 is specific screen
      * @return newly created AbstractGraphicsScreen matching device's native type
@@ -580,18 +549,18 @@ public abstract class NativeWindowFactory {
     public static AbstractGraphicsScreen createScreen(final AbstractGraphicsDevice device, int screen) {
         final String type = device.getType();
         if( TYPE_X11 == type ) {
-            final X11GraphicsDevice x11Device = (X11GraphicsDevice)device;
+            final com.jogamp.nativewindow.x11.X11GraphicsDevice x11Device = (com.jogamp.nativewindow.x11.X11GraphicsDevice)device;
             if(0 > screen) {
                 screen = x11Device.getDefaultScreen();
             }
-            return new X11GraphicsScreen(x11Device, screen);
+            return new com.jogamp.nativewindow.x11.X11GraphicsScreen(x11Device, screen);
         }
         if(0 > screen) {
             screen = 0; // FIXME: Needs native API utilization
         }
         if( TYPE_AWT == type ) {
-            final AWTGraphicsDevice awtDevice = (AWTGraphicsDevice) device;
-            return new AWTGraphicsScreen(awtDevice);
+            final com.jogamp.nativewindow.awt.AWTGraphicsDevice awtDevice = (com.jogamp.nativewindow.awt.AWTGraphicsDevice) device;
+            return new com.jogamp.nativewindow.awt.AWTGraphicsScreen(awtDevice);
         }
         return new DefaultGraphicsScreen(device, screen);
     }
@@ -716,7 +685,7 @@ public abstract class NativeWindowFactory {
     }
     public static String getDefaultDisplayConnection(final String nwt) {
         if(NativeWindowFactory.TYPE_X11 == nwt) {
-            return X11Util.getNullDisplayName();
+            return jogamp.nativewindow.x11.X11Util.getNullDisplayName();
         } else {
             return AbstractGraphicsDevice.DEFAULT_CONNECTION;
         }
@@ -731,6 +700,7 @@ public abstract class NativeWindowFactory {
     public static AbstractGraphicsDevice createDevice(final String displayConnection, final boolean own) {
         return createDevice(NativeWindowFactory.getNativeWindowType(true), displayConnection, own);
     }
+
     /**
      * Creates a native device type, following the given {@link #getNativeWindowType(boolean) native-window-type}.
      * <p>
@@ -743,18 +713,18 @@ public abstract class NativeWindowFactory {
     public static AbstractGraphicsDevice createDevice(final String nwt, final String displayConnection, final boolean own) {
         if( NativeWindowFactory.TYPE_X11 == nwt ) {
             if( own ) {
-                return new X11GraphicsDevice(displayConnection, AbstractGraphicsDevice.DEFAULT_UNIT, null /* ToolkitLock */);
+                return new com.jogamp.nativewindow.x11.X11GraphicsDevice(displayConnection, AbstractGraphicsDevice.DEFAULT_UNIT, null /* ToolkitLock */);
             } else {
-                return new X11GraphicsDevice(displayConnection, AbstractGraphicsDevice.DEFAULT_UNIT);
+                return new com.jogamp.nativewindow.x11.X11GraphicsDevice(displayConnection, AbstractGraphicsDevice.DEFAULT_UNIT);
             }
         } else if( NativeWindowFactory.TYPE_WINDOWS == nwt ) {
-            return new WindowsGraphicsDevice(AbstractGraphicsDevice.DEFAULT_UNIT);
+            return new com.jogamp.nativewindow.windows.WindowsGraphicsDevice(AbstractGraphicsDevice.DEFAULT_UNIT);
         } else if( NativeWindowFactory.TYPE_MACOSX == nwt ) {
-            return new MacOSXGraphicsDevice(AbstractGraphicsDevice.DEFAULT_UNIT);
+            return new com.jogamp.nativewindow.macosx.MacOSXGraphicsDevice(AbstractGraphicsDevice.DEFAULT_UNIT);
         } else if( NativeWindowFactory.TYPE_IOS == nwt ) {
-            return new IOSGraphicsDevice(AbstractGraphicsDevice.DEFAULT_UNIT);
+            return new com.jogamp.nativewindow.ios.IOSGraphicsDevice(AbstractGraphicsDevice.DEFAULT_UNIT);
         } else if( NativeWindowFactory.TYPE_EGL == nwt ) {
-            final EGLGraphicsDevice device;
+            final com.jogamp.nativewindow.egl.EGLGraphicsDevice device;
             if( own ) {
                 Object odev = null;
                 try {
@@ -766,14 +736,14 @@ public abstract class NativeWindowFactory {
                 } catch (final Exception e) {
                     throw new NativeWindowException("EGLDisplayUtil.eglCreateEGLGraphicsDevice failed", e);
                 }
-                if( odev instanceof EGLGraphicsDevice ) {
-                    device = (EGLGraphicsDevice)odev;
+                if( odev instanceof com.jogamp.nativewindow.egl.EGLGraphicsDevice ) {
+                    device = (com.jogamp.nativewindow.egl.EGLGraphicsDevice)odev;
                     device.open();
                 } else {
                     throw new NativeWindowException("EGLDisplayUtil.eglCreateEGLGraphicsDevice failed");
                 }
             } else {
-                device = new EGLGraphicsDevice(0, 0 /* EGL.EGL_NO_DISPLAY */, displayConnection, AbstractGraphicsDevice.DEFAULT_UNIT, null);
+                device = new com.jogamp.nativewindow.egl.EGLGraphicsDevice(0 /* EGL.EGL_DEFAULT_DISPLAY */, displayConnection, AbstractGraphicsDevice.DEFAULT_UNIT);
             }
             return device;
         } else if( NativeWindowFactory.TYPE_AWT == nwt ) {
@@ -813,13 +783,13 @@ public abstract class NativeWindowFactory {
     public static Point getLocationOnScreen(final NativeWindow nw) {
         final String nwt = NativeWindowFactory.getNativeWindowType(true);
         if( NativeWindowFactory.TYPE_X11 == nwt ) {
-            return X11Lib.GetRelativeLocation(nw.getDisplayHandle(), nw.getScreenIndex(), nw.getWindowHandle(), 0, 0, 0);
+            return jogamp.nativewindow.x11.X11Lib.GetRelativeLocation(nw.getDisplayHandle(), nw.getScreenIndex(), nw.getWindowHandle(), 0, 0, 0);
         } else if( NativeWindowFactory.TYPE_WINDOWS == nwt ) {
-            return GDIUtil.GetRelativeLocation(nw.getWindowHandle(), 0, 0, 0);
+            return jogamp.nativewindow.windows.GDIUtil.GetRelativeLocation(nw.getWindowHandle(), 0, 0, 0);
         } else if( NativeWindowFactory.TYPE_MACOSX == nwt ) {
-            return OSXUtil.GetLocationOnScreen(nw.getWindowHandle(), 0, 0);
+            return jogamp.nativewindow.macosx.OSXUtil.GetLocationOnScreen(nw.getWindowHandle(), 0, 0);
         } else if( NativeWindowFactory.TYPE_IOS == nwt ) {
-            return IOSUtil.GetLocationOnScreen(nw.getWindowHandle(), 0, 0);
+            return jogamp.nativewindow.ios.IOSUtil.GetLocationOnScreen(nw.getWindowHandle(), 0, 0);
         /**
          * FIXME: Needs service provider interface (SPI) for TK dependent implementation
         } else if( NativeWindowFactory.TYPE_BCM_VC_IV == nwt ) {

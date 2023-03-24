@@ -54,7 +54,6 @@ import jogamp.newt.swt.SWTEDTUtil;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.SWTException;
 import org.eclipse.swt.graphics.Color;
-import org.eclipse.swt.graphics.Rectangle;
 import org.eclipse.swt.widgets.Canvas;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Event;
@@ -80,7 +79,7 @@ public class NewtCanvasSWT extends Canvas implements NativeWindowHolder, WindowC
 
     private WindowClosingMode newtChildClosingMode = WindowClosingMode.DISPOSE_ON_CLOSE;
     private final WindowClosingMode closingMode = WindowClosingMode.DISPOSE_ON_CLOSE;
-    private volatile Rectangle clientAreaPixels, clientAreaWindow;
+    private volatile org.eclipse.swt.graphics.Rectangle clientAreaPixels, clientAreaWindow;
     /** pixelScale = pixelUnit / windowUnix */
     private volatile float[] pixelScale = new float[] { 1f, 1f };
 
@@ -197,7 +196,7 @@ public class NewtCanvasSWT extends Canvas implements NativeWindowHolder, WindowC
      * </p>
      * @param r containing desired size
      */
-    private final void setNewtChildSize(final Rectangle r) {
+    private final void setNewtChildSize(final org.eclipse.swt.graphics.Rectangle r) {
         if( !SWTAccessor.isOSX ) {
             final Point p = SWTAccessor.deviceZoomScaleUp(new Point(r.width, r.height));
             newtChild.setSize(p.getX(), p.getY());
@@ -232,7 +231,8 @@ public class NewtCanvasSWT extends Canvas implements NativeWindowHolder, WindowC
             case SWT.Paint:
                 if( DEBUG ) {
                     System.err.println(shortName()+".Event.PAINT, "+event);
-                    System.err.println(shortName()+".Event.PAINT, "+newtChild.getDelegatedWindow().toSimpleString());
+                    // Cannot invoke "com.jogamp.newt.Window.getDelegatedWindow()" because the return value of "com.jogamp.newt.swt.NewtCanvasSWT.access$200(com.jogamp.newt.swt.NewtCanvasSWT)" is null
+                    // System.err.println(shortName()+".Event.PAINT, "+newtChild.getDelegatedWindow().toSimpleString());
                 }
                 if( validateNative() && newtChildReady ) {
                     if( postSetSize ) {
@@ -249,13 +249,13 @@ public class NewtCanvasSWT extends Canvas implements NativeWindowHolder, WindowC
             case SWT.Move:
                 if( DEBUG ) {
                     System.err.println(shortName()+".Event.MOVE, "+event);
-                    System.err.println(shortName()+".Event.MOVE, "+newtChild.getDelegatedWindow().toSimpleString());
+                    // System.err.println(shortName()+".Event.MOVE, "+newtChild.getDelegatedWindow().toSimpleString());
                 }
                 break;
             case SWT.Show:
                 if( DEBUG ) {
                     System.err.println(shortName()+".Event.SHOW, "+event);
-                    System.err.println(shortName()+".Event.SHOW, "+newtChild.getDelegatedWindow().toSimpleString());
+                    // System.err.println(shortName()+".Event.SHOW, "+newtChild.getDelegatedWindow().toSimpleString());
                 }
                 if( newtChildReady ) {
                     newtChild.setVisible(true /* wait */, true /* visible */);
@@ -264,7 +264,7 @@ public class NewtCanvasSWT extends Canvas implements NativeWindowHolder, WindowC
             case SWT.Hide:
                 if( DEBUG ) {
                     System.err.println(shortName()+".Event.HIDE, "+event);
-                    System.err.println(shortName()+".Event.HIDE, "+newtChild.getDelegatedWindow().toSimpleString());
+                    // System.err.println(shortName()+".Event.HIDE, "+newtChild.getDelegatedWindow().toSimpleString());
                 }
                 if( newtChildReady ) {
                     newtChild.setVisible(true /* wait */, false /* visible */);
@@ -273,7 +273,7 @@ public class NewtCanvasSWT extends Canvas implements NativeWindowHolder, WindowC
             case SWT.Resize:
                 if( DEBUG ) {
                     System.err.println(shortName()+".Event.RESIZE, "+event);
-                    System.err.println(shortName()+".Event.RESIZE, "+newtChild.getDelegatedWindow().toSimpleString());
+                    // System.err.println(shortName()+".Event.RESIZE, "+newtChild.getDelegatedWindow().toSimpleString());
                 }
                 if( isNativeValid() ) {
                     // ensure this is being called if already valid
@@ -285,26 +285,27 @@ public class NewtCanvasSWT extends Canvas implements NativeWindowHolder, WindowC
             case SWT.Dispose:
                 if( DEBUG ) {
                     System.err.println(shortName()+".Event.DISPOSE, "+event);
-                    System.err.println(shortName()+".Event.DISPOSE, "+newtChild.getDelegatedWindow().toSimpleString());
+                    // Cannot invoke "com.jogamp.newt.Window.getDelegatedWindow()" because the return value of "com.jogamp.newt.swt.NewtCanvasSWT.access$200(com.jogamp.newt.swt.NewtCanvasSWT)" is null
+                    // System.err.println(shortName()+".Event.DISPOSE, "+newtChild.getDelegatedWindow().toSimpleString());
                 }
                 NewtCanvasSWT.this.dispose();
                 break;
             case SWT.Activate: // receives focus ??
                 if( DEBUG ) {
                     System.err.println(shortName()+".Event.ACTIVATE, "+event);
-                    System.err.println(shortName()+".Event.ACTIVATE, "+newtChild.getDelegatedWindow().toSimpleString());
+                    // System.err.println(shortName()+".Event.ACTIVATE, "+newtChild.getDelegatedWindow().toSimpleString());
                 }
                 break;
             case SWT.Deactivate: // lost focus ??
                 if( DEBUG ) {
                     System.err.println(shortName()+".Event.DEACTIVATE, "+event);
-                    System.err.println(shortName()+".Event.DEACTIVATE, "+newtChild.getDelegatedWindow().toSimpleString());
+                    // System.err.println(shortName()+".Event.DEACTIVATE, "+newtChild.getDelegatedWindow().toSimpleString());
                 }
                 break;
             case SWT.FocusIn: // receives focus
                 if( DEBUG ) {
                     System.err.println(shortName()+".Event.FOCUS_IN, "+event);
-                    System.err.println(shortName()+".Event.FOCUS_IN, "+newtChild.getDelegatedWindow().toSimpleString());
+                    // System.err.println(shortName()+".Event.FOCUS_IN, "+newtChild.getDelegatedWindow().toSimpleString());
                 }
                 if( newtChildReady ) {
                     newtChild.requestFocus(false /* wait */);
@@ -313,14 +314,14 @@ public class NewtCanvasSWT extends Canvas implements NativeWindowHolder, WindowC
             case SWT.FocusOut: // lost focus
                 if( DEBUG ) {
                     System.err.println(shortName()+".Event.FOCUS_OUT, "+event);
-                    System.err.println(shortName()+".Event.FOCUS_OUT, "+newtChild.getDelegatedWindow().toSimpleString());
+                    // System.err.println(shortName()+".Event.FOCUS_OUT, "+newtChild.getDelegatedWindow().toSimpleString());
                 }
                 // we lack newtChild.releaseFocus(..) as this should be handled by the WM
                 break;
             default:
                 if( DEBUG ) {
                     System.err.println(shortName()+".Event.misc: "+event.type+", "+event);
-                    System.err.println(shortName()+".Event.misc: "+newtChild.getDelegatedWindow().toSimpleString());
+                    // System.err.println(shortName()+".Event.misc: "+newtChild.getDelegatedWindow().toSimpleString());
                 }
             }
         }
@@ -342,7 +343,7 @@ public class NewtCanvasSWT extends Canvas implements NativeWindowHolder, WindowC
             return true; // already valid
         }
         updatePosSizeCheck();
-        final Rectangle nClientAreaWindow = clientAreaWindow;
+        final org.eclipse.swt.graphics.Rectangle nClientAreaWindow = clientAreaWindow;
         if(0 >= nClientAreaWindow.width || 0 >= nClientAreaWindow.height) {
             return false;
         }
@@ -376,9 +377,9 @@ public class NewtCanvasSWT extends Canvas implements NativeWindowHolder, WindowC
     }
 
     protected final void updatePosSizeCheck() {
-        final Rectangle oClientAreaWindow = clientAreaWindow;
-        final Rectangle nClientAreaPixels = SWTAccessor.getClientAreaInPixels(this);
-        final Rectangle nClientAreaWindow = getClientArea();
+        final org.eclipse.swt.graphics.Rectangle oClientAreaWindow = clientAreaWindow;
+        final org.eclipse.swt.graphics.Rectangle nClientAreaPixels = SWTAccessor.getClientAreaInPixels(this);
+        final org.eclipse.swt.graphics.Rectangle nClientAreaWindow = getClientArea();
         final boolean sizeChanged, posChanged;
         {
             sizeChanged = nClientAreaWindow.width != oClientAreaWindow.width || nClientAreaWindow.height != oClientAreaWindow.height;
@@ -687,6 +688,16 @@ public class NewtCanvasSWT extends Canvas implements NativeWindowHolder, WindowC
         }
 
         @Override
+        public int getX() {
+            return 0;
+        }
+
+        @Override
+        public int getY() {
+            return 0;
+        }
+
+        @Override
         public int getWidth() {
             return newtScaleUp(clientAreaWindow.width, clientAreaWindow.width);
         }
@@ -694,6 +705,17 @@ public class NewtCanvasSWT extends Canvas implements NativeWindowHolder, WindowC
         @Override
         public int getHeight() {
             return newtScaleUp(clientAreaWindow.height, clientAreaWindow.height);
+        }
+
+        @Override
+        public final com.jogamp.nativewindow.util.Rectangle getBounds() {
+            return new com.jogamp.nativewindow.util.Rectangle(getX(), getY(), getWidth(), getHeight());
+        }
+
+        @Override
+        public final com.jogamp.nativewindow.util.Rectangle getSurfaceBounds() {
+            return new com.jogamp.nativewindow.util.Rectangle(getX(), getY(),
+                                                              getSurfaceWidth(), getSurfaceHeight());
         }
 
         @Override
@@ -757,16 +779,6 @@ public class NewtCanvasSWT extends Canvas implements NativeWindowHolder, WindowC
         @Override
         public InsetsImmutable getInsets() {
             return insets;
-        }
-
-        @Override
-        public int getX() {
-            return 0;
-        }
-
-        @Override
-        public int getY() {
-            return 0;
         }
 
         @Override

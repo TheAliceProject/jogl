@@ -1,5 +1,5 @@
 /**
-// * Copyright 2010 JogAmp Community. All rights reserved.
+ * Copyright 2010-2023 JogAmp Community. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification, are
  * permitted provided that the following conditions are met:
@@ -27,9 +27,8 @@
  */
 package com.jogamp.graph.font;
 
-import jogamp.graph.geom.plane.AffineTransform;
-
 import com.jogamp.graph.curve.OutlineShape;
+import com.jogamp.graph.geom.plane.AffineTransform;
 import com.jogamp.opengl.math.geom.AABBox;
 
 /**
@@ -38,7 +37,7 @@ import com.jogamp.opengl.math.geom.AABBox;
  * TrueType Font Specification:
  * <ul>
  *   <li>http://www.freetype.org/freetype2/documentation.html</li>
- *   <li>http://developer.apple.com/fonts/ttrefman/rm06/Chap6.html</li>
+ *   <li>https://developer.apple.com/fonts/TrueType-Reference-Manual/RM06/Chap6.html</li>
  *   <li>http://www.microsoft.com/typography/SpecificationsOverview.mspx</li>
  *   <li>http://www.microsoft.com/typography/otspec/</li>
  * </ul>
@@ -77,22 +76,82 @@ public interface Font {
      * Depending on the font's direction, horizontal or vertical,
      * the following tables shall be used:
      *
-     * Vertical http://developer.apple.com/fonts/TTRefMan/RM06/Chap6vhea.html
-     * Horizontal http://developer.apple.com/fonts/TTRefMan/RM06/Chap6hhea.html
+     * Vertical https://developer.apple.com/fonts/TrueType-Reference-Manual/RM06/Chap6vhea.html
+     * Horizontal https://developer.apple.com/fonts/TrueType-Reference-Manual/RM06/Chap6hhea.html
      */
     public interface Metrics {
-        float getAscent(final float pixelSize);
-        float getDescent(final float pixelSize);
-        float getLineGap(final float pixelSize);
-        float getMaxExtend(final float pixelSize);
-        float getScale(final float pixelSize);
         /**
-         * @param dest AABBox instance set to this metrics boundary w/ given pixelSize
-         * @param pixelSize Use <code>pointSize * resolution</code> for resolution correct pixel-size, see {@link Font#getPixelSize(float, float)}
-         * @param tmpV3 caller provided temporary 3-component vector
-         * @return the given and set AABBox 'dest'
+         * Distance from baseline of highest ascender, a positive value.
+         * @return ascent in font-units, sourced from `hhea' table.
          */
-        AABBox getBBox(final AABBox dest, final float pixelSize, final float[] tmpV3);
+        int getAscentFU();
+
+        /**
+         * Distance from baseline of highest ascender, a positive value.
+         * @return ascent in font em-size [0..1], sourced from `hhea' table.
+         */
+        float getAscent();
+
+        /**
+         * Distance from baseline of lowest descender, a negative value.
+         * @return descent in font-units, sourced from `hhea' table.
+         */
+        int getDescentFU();
+
+        /**
+         * Distance from baseline of lowest descender, a negative value.
+         * @return descend in font em-size [0..1], sourced from `hhea' table.
+         */
+        float getDescent();
+
+        /**
+         * Typographic line gap, a positive value.
+         * @return line-gap in font-units, sourced from `hhea' table.
+         */
+        int getLineGapFU();
+
+        /**
+         * Typographic line gap, a positive value.
+         * @return line-gap in font em-size [0..1], sourced from `hhea' table.
+         */
+        float getLineGap();
+
+        /**
+         * max(lsb + (xMax-xMin)), a positive value.
+         * @return max-extend in font-units, sourced from `hhea' table.
+         */
+        int getMaxExtendFU();
+
+        /**
+         * max(lsb + (xMax-xMin)), a positive value.
+         * @return max-extend in font em-size [0..1], sourced from `hhea' table.
+         */
+        float getMaxExtend();
+
+        /** Returns the font's units per EM from the 'head' table. One em square covers one glyph. */
+        int getUnitsPerEM();
+
+        /**
+         * Return fractional font em-size [0..1], i.e. funits divided by {@link #getUnitsPerEM()}, i.e.
+         * <pre>
+         *    return funits / head.unitsPerEM;
+         * </pre>
+         * @param funits smallest font unit, where {@link #getUnitsPerEM()} square covers whole glyph
+         * @return fractional font em-size [0..1]
+         */
+        float getScale(final int funits);
+
+        /**
+         * @param dest AABBox instance set to this metrics boundary in font-units
+         * @return the given and set AABBox 'dest' in font units
+         */
+        AABBox getBBoxFU(final AABBox dest);
+
+        /**
+         * @param dest AABBox instance set to this metrics boundary in font em-size [0..1]
+         * @return the given and set AABBox 'dest' in font units
+         */
+        AABBox getBBox(final AABBox dest, final float[] tmpV3);
     }
 
     /**
@@ -106,121 +165,325 @@ public interface Font {
         // reserved special glyph IDs
         // http://scripts.sil.org/cms/scripts/page.php?item_id=IWS-Chapter08#ba57949e
         public static final int ID_UNKNOWN = 0;
-        public static final int ID_CR = 2;
-        public static final int ID_SPACE = 3;
 
-        public Font getFont();
-        public char getSymbol();
-        public short getID();
-        public AABBox getBBox();
+        /** Return this glyph's ID */
+        int getID();
+
+        /** Return the glyph's name, source from `post` table */
+        String getName();
+
+        /** Return true if the underlying {@link #getShape()} is a whitespace, otherwise false. */
+        boolean isWhiteSpace();
+
         /**
-         *
-         * @param pixelSize Use <code>pointSize * resolution</code> for resolution correct pixel-size, see {@link Font#getPixelSize(float, float)}
-         * @return
+         * Return the AABBox in font-units, borrowing internal instance.
          */
-        public float getScale(final float pixelSize);
+        AABBox getBBoxFU();
+
         /**
-         * @param dest AABBox instance set to this metrics boundary w/ given pixelSize
-         * @param pixelSize Use <code>pointSize * resolution</code> for resolution correct pixel-size, see {@link Font#getPixelSize(float, float)}
+         * Return the AABBox in font-units, copying into given dest.
+         * @param dest AABBox instance set to this metrics boundary in font-units
+         * @return the given and set AABBox 'dest' in font-units
+         */
+        AABBox getBBoxFU(final AABBox dest);
+
+        /**
+         * Return the AABBox in font em-size [0..1], copying into given dest.
+         * @param dest AABBox instance set to this metrics boundary in font em-size [0..1]
          * @param tmpV3 caller provided temporary 3-component vector
-         * @return the given and set AABBox 'dest'
+         * @return the given and set AABBox 'dest' in font em-size [0..1]
          */
-        public AABBox getBBox(final AABBox dest, final float pixelSize, float[] tmpV3);
+        AABBox getBBox(final AABBox dest, float[] tmpV3);
+
         /**
-         *
-         * @param pixelSize Use <code>pointSize * resolution</code> for resolution correct pixel-size, see {@link Font#getPixelSize(float, float)}
-         * @param useFrationalMetrics
-         * @return
+         * Return the AABBox in font em-size [0..1], creating a new copy.
          */
-        public float getAdvance(final float pixelSize, boolean useFrationalMetrics);
-        public OutlineShape getShape();
-        public int hashCode();
+        AABBox getBBox();
+
+        /** Return advance in font units, sourced from `hmtx` table. */
+        int getAdvanceFU();
+
+        /** Return advance in font em-size [0..1], sourced from `hmtx` table. */
+        float getAdvance();
+
+        /** Return leftSideBearings in font units, sourced from `hmtx` table. */
+        int getLeftSideBearingsFU();
+
+        /** Return leftSideBearings in font em-size [0..1], sourced from `hmtx` table. */
+        float getLeftSideBearings();
+
+        /** True if kerning values are horizontal, otherwise vertical */
+        boolean isKerningHorizontal();
+
+        /** True if kerning values are perpendicular to text flow, otherwise along with flow */
+        boolean isKerningCrossstream();
+
+        /** Return the number of kerning values stored for this glyph, associated to a right hand glyph. */
+        int getKerningPairCount();
+
+        /**
+         * Returns the optional kerning inter-glyph distance within words between this glyph and the given right glyph_id in font-units.
+         *
+         * @param right_glyphid right glyph code id
+         * @return font-units
+         */
+        int getKerningFU(final int right_glyphid);
+
+        /**
+         * Returns the optional kerning inter-glyph distance within words between this glyph and the given right glyph_id in fractional font em-size [0..1].
+         *
+         * @param right_glyphid right glyph code id
+         * @return fractional font em-size distance [0..1]
+         */
+        float getKerning(final int right_glyphid);
+
+        OutlineShape getShape();
+
+        @Override
+        int hashCode();
+
+        @Override
+        String toString();
+
+        /** Return all glyph details as string. */
+        String fullString();
+    }
+
+    /**
+     * General purpose {@link Font.Glyph} visitor.
+     */
+    public static interface GlyphVisitor {
+        /**
+         * Visiting the given {@link Font.Glyph} having an {@link OutlineShape} with it's corresponding {@link AffineTransform}.
+         * @param glyph {@link Font.Glyph} which contains an {@link OutlineShape} via {@link Font.Glyph#getShape()}.
+         * @param t may be used immediately as is, otherwise a copy shall be made if stored.
+         */
+        public void visit(final Glyph glyph, final AffineTransform t);
+    }
+
+    /**
+     * Constrained {@link Font.Glyph} visitor w/o {@link AffineTransform}.
+     */
+    public static interface GlyphVisitor2 {
+        /**
+         * Visiting the given {@link Font.Glyph} having an {@link OutlineShape}.
+         * @param glyph {@link Font.Glyph} which contains an {@link OutlineShape} via {@link Font.Glyph#getShape()}.
+         */
+        public void visit(final Glyph glyph);
     }
 
 
-    public String getName(final int nameIndex);
-    public StringBuilder getName(final StringBuilder string, final int nameIndex);
+    String getName(final int nameIndex);
 
     /** Shall return the family and subfamily name, separated a dash.
      * <p>{@link #getName(StringBuilder, int)} w/ {@link #NAME_FAMILY} and {@link #NAME_SUBFAMILY}</p>
      * <p>Example: "{@code Ubuntu-Regular}"</p>  */
-    public StringBuilder getFullFamilyName(final StringBuilder buffer);
+    String getFullFamilyName();
 
-    public StringBuilder getAllNames(final StringBuilder string, final String separator);
-
-    /**
-     * <pre>
-        Font Scale Formula:
-         inch: 25.4 mm
-         pointSize: [point] = [1/72 inch]
-
-         [1]      Scale := pointSize * resolution / ( 72 points per inch * units_per_em )
-         [2]  PixelSize := pointSize * resolution / ( 72 points per inch )
-         [3]      Scale := PixelSize / units_per_em
-     * </pre>
-     * @param fontSize in point-per-inch
-     * @param resolution display resolution in dots-per-inch
-     * @return pixel-per-inch, pixelSize scale factor for font operations.
-     */
-    public float getPixelSize(final float fontSize /* points per inch */, final float resolution);
+    StringBuilder getAllNames(final StringBuilder string, final String separator);
 
     /**
-     *
-     * @param glyphID
-     * @param pixelSize Use <code>pointSize * resolution</code> for resolution correct pixel-size, see {@link #getPixelSize(float, float)}
-     * @return
-     */
-    public float getAdvanceWidth(final int glyphID, final float pixelSize);
-    public Metrics getMetrics();
-    public Glyph getGlyph(final char symbol);
-    public int getNumGlyphs();
-
-    /**
-     *
-     * @param pixelSize Use <code>pointSize * resolution</code> for resolution correct pixel-size, see {@link #getPixelSize(float, float)}
-     * @return
-     */
-    public float getLineHeight(final float pixelSize);
-    /**
-     *
-     * @param string
-     * @param pixelSize Use <code>pointSize * resolution</code> for resolution correct pixel-size, see {@link #getPixelSize(float, float)}
-     * @return
-     */
-    public float getMetricWidth(final CharSequence string, final float pixelSize);
-    /**
-     *
-     * @param string
-     * @param pixelSize Use <code>pointSize * resolution</code> for resolution correct pixel-size, see {@link #getPixelSize(float, float)}
-     * @param tmp
-     * @return
-     */
-    public float getMetricHeight(final CharSequence string, final float pixelSize, final AABBox tmp);
-    /**
-     * Return the <i>layout</i> bounding box as computed by each glyph's metrics.
-     * The result is not pixel correct, bit reflects layout specific metrics.
+     * Returns the hash code based on {@link #NAME_UNIQUNAME}.
      * <p>
-     * See {@link #getPointsBounds(AffineTransform, CharSequence, float, AffineTransform, AffineTransform)} for pixel correct results.
+     * {@inheritDoc}
+     * </p>
+     */
+    @Override
+    int hashCode();
+
+    /**
+     * Returns true if other instance is of same type and {@link #NAME_UNIQUNAME} is equal.
+     * <p>
+     * {@inheritDoc}
+     * </p>
+     */
+    @Override
+    boolean equals(final Object o);
+
+    /**
+     * Return advance-width of given glyphID in font-units, sourced from `hmtx` table.
+     * @param glyphID
+     */
+    int getAdvanceWidthFU(final int glyphID);
+
+    /**
+     * Return advance-width of given glyphID in font em-size [0..1], sourced from `hmtx` table.
+     * @param glyphID
+     */
+    float getAdvanceWidth(final int glyphID);
+
+    Metrics getMetrics();
+
+    int getGlyphID(final char symbol);
+
+    Glyph getGlyph(final int glyph_id);
+
+    int getNumGlyphs();
+
+    /**
+     * Return line height, baseline-to-baseline in font-units, composed from `hhea' table entries.
+     * <pre>
+     *   return ascent - descent + linegap;
+     * </pre>
+     * or
+     * <pre>
+     *   // lineGap positive value
+     *   // descent negative value
+     *   // ascent positive value
+     *   return ascent - descent + linegap;
+     * </pre>
+     * @see Metrics#getAscentFU()
+     * @see Metrics#getDescentFU()
+     * @see Metrics#getLineGapFU()
+     */
+    int getLineHeightFU();
+
+    /**
+     * Return line height in font em-size [0..1]
+     */
+    float getLineHeight();
+
+    /**
+     * Returns metric-bounds in font-units.
+     * <p>
+     * Metric bounds is based on the `hmtx` table's advance of each glyph and `hhea' composed line height.
+     * </p>
+     * <p>
+     * For accurate layout consider using {@link #getGlyphBoundsFU(CharSequence)}.
+     * </p>
+     * @see #getMetricBounds(CharSequence)
+     * @see #getGlyphBoundsFU(CharSequence)
+     */
+    AABBox getMetricBoundsFU(final CharSequence string);
+
+    /**
+     * Returns metric-bounds in font em-size.
+     * <p>
+     * Metric bounds is based on the `hmtx` table's advance of each glyph and `hhea' composed line height.
+     * </p>
+     * <p>
+     * For accurate layout consider using {@link #getGlyphBounds(CharSequence)}.
+     * </p>
+     * @see #getMetricBoundsFU(CharSequence)
+     * @see #getGlyphBounds(CharSequence)
+     * @see #getGlyphShapeBounds(CharSequence)
+     */
+    AABBox getMetricBounds(final CharSequence string);
+
+    /**
+     * Try using {@link #getGlyphBounds(CharSequence, AffineTransform, AffineTransform)} to reuse {@link AffineTransform} instances.
+     */
+    AABBox getGlyphBounds(final CharSequence string);
+
+    /**
+     * Returns accurate bounding box by taking each glyph's font em-sized bounding box into account.
+     * <p>
+     * Glyph bounds is based on each glyph's bounding box and `hhea' composed line height.
      * </p>
      * @param string string text
-     * @param pixelSize Use <code>pointSize * resolution</code> for resolution correct pixel-size, see {@link #getPixelSize(float, float)}
+     * @param tmp1 temp {@link AffineTransform} to be reused
+     * @param tmp2 temp {@link AffineTransform} to be reused
+     * @return the bounding box of the given string in font em-size [0..1]
+     * @see #getGlyphBoundsFU(CharSequence)
+     * @see #getGlyphShapeBounds(CharSequence)
+     * @see #getMetricBounds(CharSequence)
      */
-    public AABBox getMetricBounds(final CharSequence string, final float pixelSize);
+    AABBox getGlyphBounds(final CharSequence string, final AffineTransform tmp1, final AffineTransform tmp2);
 
     /**
-     * Return the bounding box by taking each glyph's point-based bounding box into account.
+     * Try using {@link #getGlyphBoundsFU(CharSequence, AffineTransform, AffineTransform)} to reuse {@link AffineTransform} instances.
+     */
+    AABBox getGlyphBoundsFU(final CharSequence string);
+
+    /**
+     * Returns accurate bounding box by taking each glyph's font-units sized bounding box into account.
+     * <p>
+     * Glyph bounds is based on each glyph's bounding box and `hhea' composed line height.
+     * </p>
+     * @param string string text
+     * @param tmp1 temp {@link AffineTransform} to be reused
+     * @param tmp2 temp {@link AffineTransform} to be reused
+     * @return the bounding box of the given string in font-units [0..1]
+     * @see #getGlyphBounds(CharSequence)
+     */
+    AABBox getGlyphBoundsFU(final CharSequence string, final AffineTransform tmp1, final AffineTransform tmp2);
+
+    /**
+     * Returns accurate bounding box by taking each glyph's font em-sized {@link OutlineShape} into account.
+     * <p>
+     * Glyph shape bounds is based on each glyph's {@link OutlineShape} and `hhea' composed line height.
+     * </p>
+     * <p>
+     * This method is only exposed to validate the produced {@link OutlineShape} against {@link #getGlyphBounds(CharSequence)}.
+     * </p>
      * @param transform optional given transform
      * @param string string text
-     * @param pixelSize Use <code>pointSize * resolution</code> for resolution correct pixel-size, see {@link #getPixelSize(float, float)}
+     * @return the bounding box of the given string in font-units [0..1]
+     * @see #getGlyphShapeBounds(CharSequence)
+     * @see #getGlyphBounds(CharSequence)
+     * @see #getMetricBounds(CharSequence)
+     */
+    AABBox getGlyphShapeBounds(final AffineTransform transform, final CharSequence string);
+
+    /**
+     * Returns accurate bounding box by taking each glyph's font em-sized {@link OutlineShape} into account.
+     * <p>
+     * Glyph shape bounds is based on each glyph's {@link OutlineShape} and `hhea' composed line height.
+     * </p>
+     * <p>
+     * This method is only exposed to validate the produced {@link OutlineShape} against {@link #getGlyphBounds(CharSequence)}.
+     * </p>
+     * @param string string text
+     * @return the bounding box of the given string in font-units [0..1]
+     * @see #getGlyphShapeBounds(AffineTransform, CharSequence)
+     * @see #getGlyphBounds(CharSequence)
+     * @see #getMetricBounds(CharSequence)
+     */
+    AABBox getGlyphShapeBounds(final CharSequence string);
+
+    boolean isPrintableChar(final char c);
+
+    /**
+     * Try using {@link #processString(GlyphVisitor, AffineTransform, CharSequence, AffineTransform, AffineTransform)}
+     * to reuse {@link AffineTransform} instances.
+     * @see #processString(GlyphVisitor, AffineTransform, CharSequence, AffineTransform, AffineTransform)
+     */
+    AABBox processString(final Font.GlyphVisitor visitor, final AffineTransform transform,
+                         final CharSequence string);
+
+    /**
+     * Visit each {@link Glyph} and perhaps its {@link OutlineShape} of the string with the {@link Font.GlyphVisitor}
+     * while passing the progressed {@link AffineTransform}.
+     * <p>
+     * The processed shapes are in font em-size [0..1], but can be adjusted with the given transform, progressed and passed to the visitor.
+     * </p>
+     * @param visitor handling each {@link Font.Glyph} and perhaps its {@link OutlineShape} in font em-size [0..1] and the given {@link AffineTransform}
+     * @param transform optional given transform for size and position
+     * @param font the target {@link Font}
+     * @param string string text
      * @param temp1 temporary AffineTransform storage, mandatory
      * @param temp2 temporary AffineTransform storage, mandatory
+     * @return the bounding box of the given string by taking each glyph's font em-sized [0..1] {@link OutlineShape} into account.
+     * @see #processString(GlyphVisitor, AffineTransform, CharSequence)
      */
-    public AABBox getPointsBounds(final AffineTransform transform, final CharSequence string, final float pixelSize,
-                                  final AffineTransform temp1, final AffineTransform temp2);
+    AABBox processString(final Font.GlyphVisitor visitor, final AffineTransform transform,
+                         final CharSequence string,
+                         final AffineTransform temp1, final AffineTransform temp2);
 
-    public boolean isPrintableChar(final char c);
+    /**
+     * Visit each {@link Glyph} and perhaps its {@link OutlineShape} of the string with the constrained {@link Font.GlyphVisitor2}.
+     * <p>
+     * The processed shapes are in font em-size [0..1].
+     * </p>
+     * @param visitor handling each {@link Font.Glyph} and perhaps its {@link OutlineShape} in font em-size [0..1]
+     * @param string string text
+     */
+    void processString(final Font.GlyphVisitor2 visitor, final CharSequence string);
 
-    /** Shall return {@link #getFullFamilyName()} */
+    /** Returns {@link #getFullFamilyName()} */
     @Override
     public String toString();
+
+    /** Return all font details as string. */
+    String fullString();
 }

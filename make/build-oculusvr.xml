@@ -249,6 +249,8 @@
         <compilerarg value="i386" if="use.macosx32"/>
         <compilerarg value="-arch" if="use.macosx64"/>
         <compilerarg value="x86_64" if="use.macosx64"/>
+        <!-- compilerarg value="-arch" if="use.macosx64"/>
+        <compilerarg value="arm64" if="use.macosx64"/ -->
         <compilerarg value="-Wmost" />
         <!-- compilerarg value="-ObjC" / -->
         <compilerarg value="-mmacosx-version-min=10.5"/>
@@ -406,10 +408,6 @@
     <target name="c.configure.2" depends="c.configure.win32,c.configure.linux,c.configure.android,c.configure.solaris32,c.configure.solaris.sparcv9,c.configure.solaris.amd64,c.configure.macosx,c.configure.freebsd,c.configure.hpux" />
 
     <target name="c.configure" depends="c.configure.1,c.configure.2" />
-
-    <target name="rename.mingw.dll" if="isMingW">
-        <move file="${src}" tofile="${dest}" />
-    </target>
 
     <macrodef name="c.build">
       <attribute name="compiler.cfg.id" />
@@ -655,13 +653,6 @@
               </linker>
             </cc>
     
-            <!-- FIXME: this is a hack; the cpptask should have an option to change the
-                 suffix or at least understand the override from so to dll -->
-            <antcall target="rename.mingw.dll" inheritRefs="true">
-                <param name="src"  value="${obj.oculusvr}/lib@{output.lib.name}.so" />
-                <param name="dest" value="${obj.oculusvr}/@{output.lib.name}.dll" />
-            </antcall>
-
             <!-- this stripping may be called more than once on the same library dir,
                  but that should cause no harm, and doing it here inside outofdate
                  prevents the JARs from always being rebuilt even if no source code changes -->

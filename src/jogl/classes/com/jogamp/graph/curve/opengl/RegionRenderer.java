@@ -1,5 +1,5 @@
 /**
- * Copyright 2010 JogAmp Community. All rights reserved.
+ * Copyright 2010-2023 JogAmp Community. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification, are
  * permitted provided that the following conditions are met:
@@ -50,18 +50,23 @@ import com.jogamp.graph.curve.Region;
 
 /**
  * OpenGL {@link Region} renderer
- * <p>
- * All OpenGL related operations regarding {@link Region}s
- * are passed through an instance of this class.
- * </p>
+ *
+ * All {@link Region} rendering operations utilize a RegionRenderer.
+ *
+ * The RegionRenderer owns its {@link RenderState}, a composition.
+ *
+ * The RegionRenderer manages and own all used {@link ShaderProgram}s, a composition.
+ *
+ * At its {@link #destroy(GL2ES2) destruction}, all {@link ShaderProgram}s and its {@link RenderState}
+ * will be destroyed and released.
  */
-public class RegionRenderer {
+public final class RegionRenderer {
     protected static final boolean DEBUG = Region.DEBUG;
     protected static final boolean DEBUG_INSTANCE = Region.DEBUG_INSTANCE;
 
     /**
      * May be passed to
-     * {@link RegionRenderer#create(RenderState, com.jogamp.graph.curve.opengl.RegionRenderer.GLCallback, com.jogamp.graph.curve.opengl.RegionRenderer.GLCallback) RegionRenderer ctor},
+     * {@link RegionRenderer#create(Vertex.Factory<? extends Vertex>, RenderState, com.jogamp.graph.curve.opengl.RegionRenderer.GLCallback, com.jogamp.graph.curve.opengl.RegionRenderer.GLCallback) RegionRenderer ctor},
      * e.g.
      * <ul>
      *   <li>{@link RegionRenderer#defaultBlendEnable}</li>
@@ -86,7 +91,7 @@ public class RegionRenderer {
      * to set the proper {@link GL#glBlendFuncSeparate(int, int, int, int) blend-function}
      * and the clear-color to <i>transparent-black</i> in case of {@link Region#isTwoPass(int) multipass} FBO rendering.
      * </p>
-     * @see #create(RenderState, GLCallback, GLCallback)
+     * @see #create(Vertex.Factory<? extends Vertex>, RenderState, GLCallback, GLCallback)
      * @see #enable(GL2ES2, boolean)
      */
     public static final GLCallback defaultBlendEnable = new GLCallback() {
@@ -110,7 +115,7 @@ public class RegionRenderer {
      * <p>
      * Implementation also clears {@link RegionRenderer#getRenderState() RenderState}'s {@link RenderState#BITHINT_BLENDING_ENABLED blending bit-hint}.
      * </p>
-     * @see #create(RenderState, GLCallback, GLCallback)
+     * @see #create(Vertex.Factory<? extends Vertex>, RenderState, GLCallback, GLCallback)
      * @see #enable(GL2ES2, boolean)
      */
     public static final GLCallback defaultBlendDisable = new GLCallback() {
@@ -127,24 +132,58 @@ public class RegionRenderer {
     };
 
     /**
-     * Create a Hardware accelerated Region Renderer.
+     * Create a hardware accelerated RegionRenderer including its {@link RenderState} composition.
      * <p>
      * The optional {@link GLCallback}s <code>enableCallback</code> and <code>disableCallback</code>
      * maybe used to issue certain tasks at {@link #enable(GL2ES2, boolean)}.<br/>
      * For example, instances {@link #defaultBlendEnable} and {@link #defaultBlendDisable}
      * can be utilized to enable and disable {@link GL#GL_BLEND}.
      * </p>
-     * @param rs the used {@link RenderState}
+     * @return an instance of Region Renderer
+     * @see #enable(GL2ES2, boolean)
+     */
+    public static RegionRenderer create() {
+        return new RegionRenderer(null, null, null);
+    }
+
+    /**
+     * Create a hardware accelerated RegionRenderer including its {@link RenderState} composition.
+     * <p>
+     * The optional {@link GLCallback}s <code>enableCallback</code> and <code>disableCallback</code>
+     * maybe used to issue certain tasks at {@link #enable(GL2ES2, boolean)}.<br/>
+     * For example, instances {@link #defaultBlendEnable} and {@link #defaultBlendDisable}
+     * can be utilized to enable and disable {@link GL#GL_BLEND}.
+     * </p>
      * @param enableCallback optional {@link GLCallback}, if not <code>null</code> will be issued at
-     *                       {@link #init(GL2ES2, int) init(gl)} and {@link #enable(GL2ES2, boolean) enable(gl, true)}.
+     *                       {@link #init(GL2ES2) init(gl)} and {@link #enable(GL2ES2, boolean) enable(gl, true)}.
      * @param disableCallback optional {@link GLCallback}, if not <code>null</code> will be issued at
      *                        {@link #enable(GL2ES2, boolean) enable(gl, false)}.
      * @return an instance of Region Renderer
      * @see #enable(GL2ES2, boolean)
      */
-    public static RegionRenderer create(final RenderState rs, final GLCallback enableCallback,
-                                        final GLCallback disableCallback) {
-        return new RegionRenderer(rs, enableCallback, disableCallback);
+    public static RegionRenderer create(final GLCallback enableCallback, final GLCallback disableCallback) {
+        return new RegionRenderer(enableCallback, disableCallback);
+    }
+
+    /**
+     * Create a hardware accelerated RegionRenderer including its {@link RenderState} composition.
+     * <p>
+     * The optional {@link GLCallback}s <code>enableCallback</code> and <code>disableCallback</code>
+     * maybe used to issue certain tasks at {@link #enable(GL2ES2, boolean)}.<br/>
+     * For example, instances {@link #defaultBlendEnable} and {@link #defaultBlendDisable}
+     * can be utilized to enable and disable {@link GL#GL_BLEND}.
+     * </p>
+     * @param sharedPMVMatrix optional shared {@link PMVMatrix} to be used for the {@link RenderState} composition.
+     * @param enableCallback optional {@link GLCallback}, if not <code>null</code> will be issued at
+     *                       {@link #init(GL2ES2) init(gl)} and {@link #enable(GL2ES2, boolean) enable(gl, true)}.
+     * @param disableCallback optional {@link GLCallback}, if not <code>null</code> will be issued at
+     *                        {@link #enable(GL2ES2, boolean) enable(gl, false)}.
+     * @return an instance of Region Renderer
+     * @see #enable(GL2ES2, boolean)
+     */
+    public static RegionRenderer create(final PMVMatrix sharedPMVMatrix,
+                                        final GLCallback enableCallback, final GLCallback disableCallback) {
+        return new RegionRenderer(sharedPMVMatrix, enableCallback, disableCallback);
     }
 
     private final RenderState rs;
@@ -152,27 +191,42 @@ public class RegionRenderer {
     private final GLCallback enableCallback;
     private final GLCallback disableCallback;
 
-    private int vp_width;
-    private int vp_height;
+    private final int[] viewport = new int[] { 0, 0, 0, 0 };
     private boolean initialized;
     private boolean vboSupported = false;
 
     public final boolean isInitialized() { return initialized; }
 
+    /** Copies the current int[4] viewport in given target and returns it for chaining. */
+    public final int[/*4*/] getViewport(final int[/*4*/] target) {
+        System.arraycopy(viewport, 0, target, 0, 4);
+        return target;
+    }
+    /** Borrows the current int[4] viewport w/o copying. */
+    public final int[/*4*/] getViewport() {
+        return viewport;
+    }
     /** Return width of current viewport */
-    public final int getWidth() { return vp_width; }
+    public final int getWidth() { return viewport[2]; }
     /** Return height of current viewport */
-    public final int getHeight() { return vp_height; }
+    public final int getHeight() { return viewport[3]; }
 
+    /** Borrow the current {@link PMVMatrix}. */
     public final PMVMatrix getMatrix() { return rs.getMatrix(); }
 
     //////////////////////////////////////
 
-    /**
-     * @param rs the used {@link RenderState}
-     */
-    protected RegionRenderer(final RenderState rs, final GLCallback enableCallback, final GLCallback disableCallback) {
-        this.rs = rs;
+    protected RegionRenderer(final GLCallback enableCallback, final GLCallback disableCallback)
+    {
+        this.rs = new RenderState(null);
+        this.enableCallback = enableCallback;
+        this.disableCallback = disableCallback;
+    }
+
+    protected RegionRenderer(final PMVMatrix sharedPMVMatrix,
+                             final GLCallback enableCallback, final GLCallback disableCallback)
+    {
+        this.rs = new RenderState(sharedPMVMatrix);
         this.enableCallback = enableCallback;
         this.disableCallback = disableCallback;
     }
@@ -186,10 +240,9 @@ public class RegionRenderer {
      * <p>Shall be called by a {@code draw()} method, e.g. {@link RegionRenderer#draw(GL2ES2, Region, int)}</p>
      *
      * @param gl referencing the current GLContext to which the ShaderState is bound to
-     * @param renderModes
      * @throws GLException if initialization failed
      */
-    public final void init(final GL2ES2 gl, final int renderModes) throws GLException {
+    public final void init(final GL2ES2 gl) throws GLException {
         if(initialized){
             return;
         }
@@ -216,6 +269,7 @@ public class RegionRenderer {
         initialized = true;
     }
 
+    /** Deletes all {@link ShaderProgram}s and nullifies its references including {@link RenderState#destroy(GL2ES2)}. */
     public final void destroy(final GL2ES2 gl) {
         if(!initialized){
             if(DEBUG_INSTANCE) {
@@ -228,29 +282,51 @@ public class RegionRenderer {
             sp.destroy(gl);
         }
         shaderPrograms.clear();
-        rs.destroy(gl);
+        rs.destroy();
         initialized = false;
     }
 
+    /** Return the {@link RenderState} composition. */
     public final RenderState getRenderState() { return rs; }
 
     /**
      * Enabling or disabling the {@link #getRenderState() RenderState}'s
-     * {@link RenderState#getShaderProgram() shader program}.
+     * current {@link RenderState#getShaderProgram() shader program}.
      * <p>
-     * In case enable and disable {@link GLCallback}s are setup via {@link #create(RenderState, GLCallback, GLCallback)},
+     * {@link #useShaderProgram(GL2ES2, int, boolean, int, int, TextureSequence)}
+     * generates, selects and caches the desired Curve-Graph {@link ShaderProgram}
+     * and {@link RenderState#setShaderProgram(GL2ES2, ShaderProgram) sets it current} in the {@link RenderState} composition.
+     * </p>
+     * <p>
+     * In case enable and disable {@link GLCallback}s are setup via {@link #create(Vertex.Factory<? extends Vertex>, RenderState, GLCallback, GLCallback)},
      * they will be called before toggling the shader program.
      * </p>
-     * @see #create(RenderState, GLCallback, GLCallback)
+     * @param gl current GL object
+     * @param enable if true enable the current {@link ShaderProgram}, otherwise disable.
+     * @see #create(Vertex.Factory<? extends Vertex>, RenderState, GLCallback, GLCallback)
+     * @see #useShaderProgram(GL2ES2, int, boolean, int, int, TextureSequence)
+     * @see RenderState#setShaderProgram(GL2ES2, ShaderProgram)
+     * @see RenderState#getShaderProgram()
      */
     public final void enable(final GL2ES2 gl, final boolean enable) {
+        enable(gl, enable, enableCallback, disableCallback);
+    }
+
+    /**
+     * Same as {@link #enable(GL2ES2, boolean)} but allowing to force {@link GLCallback}s off.
+     * @param gl current GL object
+     * @param enable if true enable the current {@link ShaderProgram}, otherwise disable.
+     * @param doCallbacks if true (default) perform {@link GLCallback}s, otherwise don't.
+     * @see #enable(GL2ES2, boolean)
+     */
+    public final void enable(final GL2ES2 gl, final boolean enable, final GLCallback enableCB, final GLCallback disableCB) {
         if( enable ) {
-            if( null != enableCallback ) {
-                enableCallback.run(gl, this);
+            if( null != enableCB ) {
+                enableCB.run(gl, this);
             }
         } else {
-            if( null != disableCallback ) {
-                disableCallback.run(gl, this);
+            if( null != disableCB ) {
+                disableCB.run(gl, this);
             }
         }
         if( !enable ) {
@@ -261,15 +337,18 @@ public class RegionRenderer {
         }
     }
 
-    /** No PMVMatrix operation is performed here. PMVMatrix is marked dirty. */
-    public final void reshapeNotify(final int width, final int height) {
-        this.vp_width = width;
-        this.vp_height = height;
+    /**
+     * No PMVMatrix operation is performed here.
+     */
+    public final void reshapeNotify(final int x, final int y, final int width, final int height) {
+        viewport[0] = x;
+        viewport[1] = y;
+        viewport[2] = width;
+        viewport[3] = height;
     }
 
     public final void reshapePerspective(final float angle, final int width, final int height, final float near, final float far) {
-        this.vp_width = width;
-        this.vp_height = height;
+        reshapeNotify(0, 0, width, height);
         final float ratio = (float)width/(float)height;
         final PMVMatrix p = rs.getMatrix();
         p.glMatrixMode(GLMatrixFunc.GL_PROJECTION);
@@ -277,9 +356,11 @@ public class RegionRenderer {
         p.gluPerspective(angle, ratio, near, far);
     }
 
+    /**
+     * Perspective orthogonal, method calls {@link #reshapeNotify(int, int, int, int)}.
+     */
     public final void reshapeOrtho(final int width, final int height, final float near, final float far) {
-        this.vp_width = width;
-        this.vp_height = height;
+        reshapeNotify(0, 0, width, height);
         final PMVMatrix p = rs.getMatrix();
         p.glMatrixMode(GLMatrixFunc.GL_PROJECTION);
         p.glLoadIdentity();
@@ -402,6 +483,11 @@ public class RegionRenderer {
     private static final int TWO_PASS_BIT = 1 <<  31;
 
     /**
+     * Generate, selects and caches the desired Curve-Graph {@link ShaderProgram} according to the given parameters.
+     *
+     * The newly generated or cached {@link ShaderProgram} is {@link RenderState#setShaderProgram(GL2ES2, ShaderProgram) set current} in the {@link RenderState} composition
+     * and can be retrieved via {@link RenderState#getShaderProgram()}.
+     *
      * @param gl
      * @param renderModes
      * @param pass1
@@ -410,19 +496,27 @@ public class RegionRenderer {
      * @param colorTexSeq
      * @return true if a new shader program is being used and hence external uniform-data and -location,
      *         as well as the attribute-location must be updated, otherwise false.
+     * @see #enable(GL2ES2, boolean)
+     * @see RenderState#setShaderProgram(GL2ES2, ShaderProgram)
+     * @see RenderState#getShaderProgram()
      */
     public final boolean useShaderProgram(final GL2ES2 gl, final int renderModes,
                                           final boolean pass1, final int quality, final int sampleCount, final TextureSequence colorTexSeq) {
-        final int colorTexSeqHash;
-        if( null != colorTexSeq ) {
-            colorTexSeqHash = colorTexSeq.getTextureFragmentShaderHashCode();
-        } else {
-            colorTexSeqHash = 0;
-        }
         final ShaderModeSelector1 sel1 = pass1 ? ShaderModeSelector1.selectPass1(renderModes) :
                                                  ShaderModeSelector1.selectPass2(renderModes, quality, sampleCount);
         final boolean isTwoPass = Region.isTwoPass( renderModes );
-        final boolean isPass1ColorTexSeq = pass1 && null != colorTexSeq;
+        final boolean hasColorChannel = Region.hasColorChannel( renderModes );
+        final boolean hasColorTexture = Region.hasColorTexture( renderModes ) && null != colorTexSeq;
+        final boolean isPass1ColorTexSeq = pass1 && hasColorTexture;
+        final int colorTexSeqHash;
+        final String texLookupFuncName;
+        if( isPass1ColorTexSeq ) {
+            texLookupFuncName = colorTexSeq.setTextureLookupFunctionName(gcuTexture2D);
+            colorTexSeqHash = colorTexSeq.getTextureFragmentShaderHashCode();
+        } else {
+            texLookupFuncName = null;
+            colorTexSeqHash = 0;
+        }
         final int shaderKey = ( (colorTexSeqHash << 5) - colorTexSeqHash ) +
                               ( sel1.ordinal() | ( HIGH_MASK & renderModes ) | ( isTwoPass ? TWO_PASS_BIT : 0 ) );
 
@@ -435,7 +529,7 @@ public class RegionRenderer {
         ShaderProgram sp = (ShaderProgram) shaderPrograms.get( shaderKey );
         if( null != sp ) {
             final boolean spChanged = getRenderState().setShaderProgram(gl, sp);
-            if(DEBUG) {
+            if( DEBUG ) {
                 if( spChanged ) {
                     System.err.printf("RegionRendererImpl01.useShaderProgram.X1: GOT renderModes %s, sel1 %s, key 0x%X -> sp %d / %d (changed)%n", Region.getRenderModeString(renderModes), sel1, shaderKey, sp.program(), sp.id());
                 } else {
@@ -493,11 +587,11 @@ public class RegionRenderer {
         // GLSL append from here on
         posFp = -1;
 
-        if( Region.hasColorChannel( renderModes ) ) {
+        if( hasColorChannel ) {
             posVp = rsVp.insertShaderSource(0, posVp, GLSL_USE_COLOR_CHANNEL);
             posFp = rsFp.insertShaderSource(0, posFp, GLSL_USE_COLOR_CHANNEL);
         }
-        if( Region.hasColorTexture( renderModes ) ) {
+        if( isPass1ColorTexSeq ) {
                     rsVp.insertShaderSource(0, posVp, GLSL_USE_COLOR_TEXTURE);
             posFp = rsFp.insertShaderSource(0, posFp, GLSL_USE_COLOR_TEXTURE);
         }
@@ -516,13 +610,9 @@ public class RegionRenderer {
             throw new RuntimeException("Failed to read: includes");
         }
 
-        final String texLookupFuncName;
         if( isPass1ColorTexSeq ) {
             posFp = rsFp.insertShaderSource(0, posFp, "uniform "+colorTexSeq.getTextureSampler2DType()+" "+UniformNames.gcu_ColorTexUnit+";\n");
-            texLookupFuncName = colorTexSeq.getTextureLookupFunctionName(gcuTexture2D);
             posFp = rsFp.insertShaderSource(0, posFp, colorTexSeq.getTextureLookupFragmentShaderImpl());
-        } else {
-            texLookupFuncName = null;
         }
 
         posFp = rsFp.insertShaderSource(0, posFp, GLSL_MAIN_BEGIN);
@@ -560,9 +650,10 @@ public class RegionRenderer {
         getRenderState().setShaderProgram(gl, sp);
 
         shaderPrograms.put(shaderKey, sp);
-        if(DEBUG) {
-            System.err.printf("RegionRendererImpl01.useShaderProgram.X1: PUT renderModes %s, sel1 %s, key 0x%X -> sp %d / %d (changed)%n",
+        if( DEBUG ) {
+            System.err.printf("RegionRendererImpl01.useShaderProgram.X1: PUT renderModes %s, sel1 %s, key 0x%X -> sp %d / %d (changed, new)%n",
                     Region.getRenderModeString(renderModes), sel1, shaderKey, sp.program(), sp.id());
+            // rsFp.dumpShaderSource(System.err);
         }
         return true;
     }

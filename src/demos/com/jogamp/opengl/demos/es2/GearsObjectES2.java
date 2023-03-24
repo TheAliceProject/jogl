@@ -27,12 +27,10 @@ import com.jogamp.opengl.GL2ES2;
 import com.jogamp.opengl.GLBufferStorage;
 import com.jogamp.opengl.GLException;
 import com.jogamp.opengl.GLUniformData;
-
+import com.jogamp.opengl.demos.GearsObject;
 import com.jogamp.opengl.util.GLArrayDataServer;
 import com.jogamp.opengl.util.PMVMatrix;
 import com.jogamp.opengl.util.glsl.ShaderState;
-
-import com.jogamp.opengl.demos.GearsObject;
 
 /**
  * GearsObjectES2.java <BR>
@@ -101,7 +99,7 @@ public class GearsObjectES2 extends GearsObject {
                 array.bindBuffer(gl, true);
                 final int bufferTarget = array.getVBOTarget();
                 final int bufferName = array.getVBOName();
-                final long bufferSize = array.getSizeInBytes();
+                final long bufferSize = array.getByteCount();
                 final int hasBufferName = gl.getBoundBuffer(bufferTarget);
                 final GLBufferStorage hasStorage = gl.getBufferStorage(hasBufferName);
                 final boolean ok = bufferName == hasBufferName &&
@@ -114,7 +112,7 @@ public class GearsObjectES2 extends GearsObject {
             }
             array.enableBuffer(gl, true);
             // System.err.println("XXX Draw face "+face+" of "+this);
-            gl.glDrawArrays(mode, 0, array.getElementCount());
+            gl.glDrawArrays(mode, 0, array.getElemCount());
             array.enableBuffer(gl, false);
         }
     }

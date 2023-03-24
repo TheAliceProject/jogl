@@ -87,7 +87,7 @@ public class WindowDriver extends WindowImpl {
      *
      * @param screen
      * @param rect the {@link RectangleImmutable} in pixel units
-     * @param definePosSize if {@code true} issue {@link #definePosition(int, int)} and {@link #defineSize(int, int)}
+     * @param definePosSize if {@code true} issue {@link #defineWindowPosition(int, int)} and {@link #defineWindowSize(int, int)}
      *                      if either has changed.
      * @return If position or size has been clamped a new {@link RectangleImmutable} instance w/ clamped values
      *         will be returned, otherwise the given {@code rect} is returned.
@@ -132,10 +132,10 @@ public class WindowDriver extends WindowImpl {
         if( modPos || modSize ) {
             if( definePosSize ) {
                 if( modPos ) {
-                    definePosition(x, y);
+                    defineWindowPosition(x, y);
                 }
                 if( modSize ) {
-                    defineSize(w, h);
+                    defineWindowSize(w, h);
                 }
             }
             return new Rectangle(x, y, w, h);
@@ -152,7 +152,7 @@ public class WindowDriver extends WindowImpl {
     }
 
     @Override
-    protected void createNativeImpl() {
+    protected void createNativeImpl(boolean[] positionModified) {
         if(0!=getParentWindowHandle()) {
             throw new RuntimeException("Window parenting not supported (yet)");
         }

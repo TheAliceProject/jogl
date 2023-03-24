@@ -175,7 +175,7 @@ public interface GLAutoDrawable extends GLDrawable {
    *   <li>If the old context was current on this thread, it is being released after disassociating this auto-drawable.</li>
    *   <li>If the new context was current on this thread, it is being released before associating this auto-drawable
    *       and made current afterwards.</li>
-   *   <li>Implementation may issue {@link #makeCurrent()} and {@link #release()} while drawable reassociation.</li>
+   *   <li>Implementation may issue {@link GLContext#makeCurrent()} and {@link GLContext#release()} while drawable reassociation.</li>
    *   <li>The user shall take extra care of thread synchronization,
    *       i.e. lock the involved {@link GLAutoDrawable auto-drawable's}
    *       {@link GLAutoDrawable#getUpstreamLock() upstream-locks} and {@link GLAutoDrawable#getNativeSurface() surfaces}
@@ -416,6 +416,13 @@ public interface GLAutoDrawable extends GLDrawable {
    * after all registered {@link GLEventListener}s
    * {@link GLEventListener#display(GLAutoDrawable) display(GLAutoDrawable)}
    * methods have been called.
+   * <p>
+   * The given {@link GLRunnable#run(GLAutoDrawable)} shall return true to indicate
+   * that the GL [back] framebuffer remains intact by this runnable. <br/>
+   * If returning false {@link GLAutoDrawable} will call
+   * {@link GLEventListener#display(GLAutoDrawable) display(GLAutoDrawable)}
+   * of all registered {@link GLEventListener}s once more to reinstate the framebuffer.
+   * </p>
    * <p>
    * If no {@link GLAnimatorControl} is animating (default),<br>
    * or if the current thread is the animator thread,<br>
